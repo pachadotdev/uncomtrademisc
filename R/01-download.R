@@ -339,7 +339,7 @@ data_downloading <- function(arrow = T) {
     )
   }
 
-  if (isTRUE(arrow)) return(TRUE)
+  if (isFALSE(arrow)) return(TRUE)
 
   # convert to arrow ----
 
