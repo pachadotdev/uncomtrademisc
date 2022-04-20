@@ -1,29 +1,39 @@
-#' A wrapper to GNU Parallel and wget for faster downloads
-#'
-#' COMPLETE DESC...
-#'
-#' @param download_link A vector of URLs
-#'
-#' @export
-data_downloading <- function(download_links) {
-  message("Downloading files in parallel...")
+# Internal functions ----
 
-  base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=60 -O %s %s"
-
-  writeLines(sprintf(base_command, download_links$new_file, download_links$url), "commands.txt")
-
-  system("parallel --jobs 4 < commands.txt")
-
-  unlink("commands.txt")
+messageline <- function(txt = NULL, width = 80) {
+  if(is.null(txt)) {
+    message(rep("-", width))
+  } else {
+    message(txt, " ", rep("-", width - nchar(txt) - 1))
+  }
 }
 
-#' A wrapper to 7-Zip and wget for faster decompression
-#'
-#' COMPLETE DESC...
-#'
-#' @param download_link A vector of URLs
-#'
-#' @export
+#' @importFrom utils menu
+check_token <- function() {
+  has_token <- menu(
+    c("yes", "no"),
+    title = "Have you safely stored COMTRADE_TOKEN in .Renviron?",
+    graphics = F
+  )
+
+  stopifnot(has_token == 1)
+}
+
+#' @importFrom utils download.file
+download_file <- function(download_links) {
+  if (Sys.info()[['sysname']] != "Windows") {
+    messageline("Downloading files in parallel...")
+    base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=60 -O %s %s"
+    writeLines(sprintf(base_command, download_links$new_file, download_links$url), "commands.txt")
+    system("parallel --jobs 4 < commands.txt")
+    unlink("commands.txt")
+  } else {
+    messageline("Windows detected, downloading files sequentially...")
+    download.file(download_links$url, download_links$new_file)
+  }
+}
+
+#' @importFrom stringr str_replace
 extract <- function(x, y) {
   if (file.exists(str_replace(x, "zip", "csv"))) {
     messageline()
@@ -35,15 +45,26 @@ extract <- function(x, y) {
   }
 }
 
-#' Convert CSV from UN COMTRADE to Apache Arrow
-#'
-#' COMPLETE DESC...
-#'
-#' @param t index COMPLETE...
-#' @param yrs years COMPLETE...
-#'
-#' @export
-convert_to_arrow <- function(t, yrs) {
+#' @importFrom dplyr case_when
+unspecified <- function(x) {
+  case_when(
+    x %in% c(NA, "") ~ "0-unspecified",
+    TRUE ~ x
+  )
+}
+
+file_remove <- function(x) {
+  try(file.remove(x))
+}
+
+#' @importFrom dplyr filter mutate mutate_if left_join group_by
+#' @importFrom stringr str_to_lower str_squish
+#' @importFrom arrow write_dataset
+#' @importFrom janitor clean_names
+#' @importFrom readr cols col_double col_integer col_character
+#' @importFrom purrr map
+#' @importFrom rlang sym
+convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_zip) {
   messageline(yrs[t])
 
   try(unlink(grep(paste0("year=",yrs[t]), raw_subdirs_parquet$file, value = T), recursive = T))
@@ -85,12 +106,12 @@ convert_to_arrow <- function(t, yrs) {
 
   d <- d %>%
     clean_names() %>%
-    rename(trade_value_usd = trade_value_us) %>%
+    rename(trade_value_usd = !!sym("trade_value_us")) %>%
     mutate_if(is.character, function(x) { str_to_lower(str_squish(x)) }) %>%
     mutate(
-      reporter_iso = unspecified(reporter_iso),
-      partner_iso = unspecified(partner_iso),
-      trade_flow = unspecified(trade_flow)
+      reporter_iso = unspecified(!!sym("reporter_iso")),
+      partner_iso = unspecified(!!sym("partner_iso")),
+      trade_flow = unspecified(!!sym("trade_flow"))
     )
 
   al <- sort(unique(d$aggregate_level))
@@ -101,7 +122,7 @@ convert_to_arrow <- function(t, yrs) {
     al,
     function(x) {
       d2 <- d %>%
-        filter(aggregate_level == x)
+        filter(!!sym("aggregate_level") == x)
 
       gc()
 
@@ -110,8 +131,8 @@ convert_to_arrow <- function(t, yrs) {
           tf,
           function(x) {
             d2 %>%
-              filter(trade_flow == x) %>%
-              group_by(aggregate_level, trade_flow, year, reporter_iso) %>%
+              filter(!!sym("trade_flow") == x) %>%
+              group_by(!!sym("aggregate_level"), !!sym("trade_flow"), !!sym("year"), !!sym("reporter_iso")) %>%
               write_dataset(raw_dir_parquet, hive_style = F)
 
             gc()
@@ -126,21 +147,238 @@ convert_to_arrow <- function(t, yrs) {
   file_remove(csv); rm(d); gc()
 }
 
-messageline <- function(txt = NULL, width = 80) {
-  if(is.null(txt)) {
-    message(rep("-", width))
-  } else {
-    message(txt, " ", rep("-", width - nchar(txt) - 1))
-  }
-}
+# Mega function to download data ----
 
-file_remove <- function(x) {
-  try(file.remove(x))
-}
+#' A wrapper to GNU Parallel and wget for faster downloads
+#'
+#' COMPLETE DESC...
+#'
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr select arrange pull rename tibble bind_rows distinct
+#' @importFrom readr read_csv write_csv
+#' @importFrom stringr str_replace_all
+#' @importFrom utils menu
+#' @importFrom rlang sym
+#'
+#' @param arrow Set to `FALSE` to just download the datasets without
+#'     converting to Apache Arrow. Otherwise keep this set to `TRUE`, which
+#'     eases posterior analysis and modeling.
+#'
+#' @export
+data_downloading <- function(arrow = T) {
+  check_token()
 
-unspecified <- function(x) {
-  case_when(
-    x %in% c(NA, "") ~ "0-unspecified",
-    TRUE ~ x
+  # download ----
+  dataset <- menu(
+    c("HS rev 1992", "HS rev 1996", "HS rev 2002", "HS rev 2007", "HS rev 2012",
+      "SITC rev 1", "SITC rev 2", "SITC rev 3", "SITC rev 4"),
+    title = "Select dataset:",
+    graphics = F
   )
+
+  remove_old_files <- menu(
+    c("yes", "no"),
+    title = "Remove old files (y/n):",
+    graphics = F
+  )
+
+  subset_years <- readline(prompt = "Years to download (i.e. `2000:2020`, hit enter to download all available data): ")
+  subset_years <- as.numeric(unlist(strsplit(subset_years, ":")))
+
+  classification <- ifelse(dataset < 6, "hs", "sitc")
+
+  revision <- switch (
+    dataset,
+    `1` = 1992,
+    `2` = 1996,
+    `3` = 2002,
+    `4` = 2007,
+    `5` = 2012,
+    `6` = 1,
+    `7` = 2,
+    `8` = 3,
+    `9` = 4
+  )
+
+  revision2 <- switch (
+    dataset,
+    `1` = 1988,
+    `2` = 1996,
+    `3` = 2002,
+    `4` = 2007,
+    `5` = 2012,
+    `6` = 1962,
+    `7` = 1976,
+    `8` = 1988,
+    `9` = 2007
+  )
+
+  classification2 <- switch (
+    dataset,
+    `1` = "H0",
+    `2` = "H1",
+    `3` = "H2",
+    `4` = "H3",
+    `5` = "H4",
+    `6` = "S1",
+    `7` = "S2",
+    `8` = "S3",
+    `9` = "S4"
+  )
+
+  max_year <- 2020
+
+  years <- revision2:max_year
+  if(length(subset_years) > 0) {
+    years <- years[years >= min(subset_years) & years <= max(subset_years)]
+  }
+
+  raw_dir <- sprintf("%s-rev%s", classification, revision)
+  try(dir.create(raw_dir))
+
+  raw_dir_zip <- sprintf("%s/%s", raw_dir, "zip")
+  try(dir.create(raw_dir_zip))
+
+  raw_dir_parquet <- str_replace(raw_dir_zip, "zip", "parquet")
+  try(dir.create(raw_dir_parquet))
+
+  try(
+    old_file <- max(
+      list.files(raw_dir, pattern = "downloaded-files.*csv", full.names = T), na.rm = T)
+  )
+
+  if (isTRUE(nchar(old_file) > 0)) {
+    old_download_links <- read_csv(old_file) %>%
+      mutate(
+        local_file_date = as.Date(gsub("_fmt.*", "", gsub(".*pub-", "", file)), "%Y%m%d")
+      ) %>%
+      rename(old_file = file)
+  }
+
+  download_links <- tibble(
+    year = years,
+    url = paste0(
+      "https://comtrade.un.org/api/get/bulk/C/A/",
+      !!sym("year"),
+      "/ALL/",
+      classification2,
+      "?token=",
+      Sys.getenv("COMTRADE_TOKEN")
+    ),
+    file = NA
+  )
+
+  files <- fromJSON(sprintf(
+    "https://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&px=%s&token=%s",
+    classification2,
+    Sys.getenv("COMTRADE_TOKEN"))) %>%
+    filter(!!sym("ps") %in% years) %>%
+    arrange(!!sym("ps"))
+
+  if (exists("old_download_links")) {
+    download_links <- download_links %>%
+      mutate(
+        file = paste0(raw_dir_zip, "/", files$name),
+        server_file_date = as.Date(gsub("_fmt.*", "", gsub(".*pub-", "", file)), "%Y%m%d")
+      ) %>%
+      left_join(old_download_links %>% select(-url), by = "year") %>%
+      rename(new_file = file) %>%
+      mutate(
+        server_file_date = as.Date(
+          ifelse(is.na(!!sym("local_file_date")), !!sym("server_file_date") + 1, !!sym("server_file_date")),
+          origin = "1970-01-01"
+        ),
+        local_file_date = as.Date(
+          ifelse(is.na(!!sym("local_file_date")), !!sym("server_file_date") - 1, !!sym("local_file_date")),
+          origin = "1970-01-01"
+        )
+      )
+  } else {
+    download_links <- download_links %>%
+      mutate(
+        file = paste0(raw_dir_zip, "/", files$name),
+
+        server_file_date = as.Date(gsub("_fmt.*", "", gsub(".*pub-", "", file)), "%Y%m%d"),
+
+        # trick in case there are no old files
+        old_file = NA,
+
+        local_file_date = !!sym("server_file_date"),
+        server_file_date = as.Date(!!sym("server_file_date") + 1, origin = "1970-01-01")
+      ) %>%
+      rename(new_file = file)
+  }
+
+  files_to_update <- download_links %>%
+    filter(!!sym("local_file_date") < !!sym("server_file_date"))
+
+  files_to_update_2 <- download_links %>%
+    mutate(file_exists = file.exists(!!sym("new_file"))) %>%
+    filter(!!sym("file_exists") == FALSE)
+
+  files_to_update <- files_to_update %>%
+    bind_rows(files_to_update_2)
+
+  years_to_update <- files_to_update$year
+
+  download_file(download_links)
+
+  download_links <- download_links %>%
+    select(!!sym("year"), !!sym("url"), !!sym("new_file"), !!sym("local_file_date")) %>%
+    rename(file = !!sym("new_file"))
+
+  download_links <- download_links %>%
+    mutate(url = str_replace_all(url, "token=.*", "token=REPLACE_TOKEN"))
+
+  if (length(years_to_update) > 0) {
+    write_csv(download_links, paste0(raw_dir, "/downloaded-files-", Sys.Date(), ".csv"))
+
+    write_csv(
+      download_links %>% filter(!!sym("year") %in% years_to_update),
+      paste0(raw_dir, "/updated-files-", Sys.Date(), ".csv")
+    )
+  }
+
+  if (isTRUE(arrow)) return(TRUE)
+
+  # convert to arrow ----
+
+  if (classification == "sitc") {
+    aggregations <- 0:5
+  } else {
+    aggregations <- 0:6
+  }
+
+  # re-create any missing/updated arrow dataset
+  raw_subdirs_parquet <- expand.grid(
+    base_dir = raw_dir_parquet,
+    aggregations = aggregations,
+    flow = c("import", "export", "re-import", "re-export"),
+    year = years
+  ) %>%
+    mutate(
+      file = paste0(
+        !!sym("base_dir"),
+        "/aggregate_level=", aggregations, "/trade_flow=",
+        !!sym("flow"), "/year=", !!sym("year")),
+      exists = file.exists(file)
+    )
+
+  update_years <- raw_subdirs_parquet %>%
+    filter(exists == FALSE | !!sym("year") %in% years_to_update) %>%
+    select(!!sym("year")) %>%
+    distinct() %>%
+    pull()
+
+  raw_zip <- list.files(
+    path = raw_dir_zip,
+    pattern = "\\.zip",
+    full.names = T
+  )
+
+  raw_zip <- grep(paste(paste0("ps-", update_years), collapse = "|"), raw_zip, value = TRUE)
+
+  if (any(update_years > 0)) {
+    lapply(seq_along(update_years), convert_to_arrow, yrs = update_years, raw_dir_parquet, raw_subdirs_parquet, raw_zip)
+  }
 }

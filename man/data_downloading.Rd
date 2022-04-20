@@ -4,10 +4,12 @@
 \alias{data_downloading}
 \title{A wrapper to GNU Parallel and wget for faster downloads}
 \usage{
-data_downloading(download_links)
+data_downloading(arrow = T)
 }
 \arguments{
-\item{download_link}{A vector of URLs}
+\item{arrow}{Set to `FALSE` to just download the datasets without
+converting to Apache Arrow. Otherwise keep this set to `TRUE`, which
+eases posterior analysis and modeling.}
 }
 \description{
 COMPLETE DESC...
