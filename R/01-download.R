@@ -20,7 +20,7 @@ check_token <- function() {
 }
 
 #' @importFrom utils download.file
-download_file <- function(download_links) {
+download_files <- function(download_links) {
   if (Sys.info()[['sysname']] != "Windows") {
     messageline("Downloading files in parallel...")
     base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=60 -O %s %s"
@@ -321,7 +321,7 @@ data_downloading <- function(arrow = T) {
 
   years_to_update <- files_to_update$year
 
-  download_file(download_links)
+  download_files(download_links)
 
   download_links <- download_links %>%
     select(!!sym("year"), !!sym("url"), !!sym("new_file"), !!sym("local_file_date")) %>%
