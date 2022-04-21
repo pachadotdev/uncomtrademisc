@@ -65,8 +65,8 @@ data_partitioned <- function(y, f, replace_unspecified_iso) {
   cat("reading data.")
 
   if (y >= 2012) {
-    hs02_count <- count_countries("hs-rev2002/parquet")
-    hs12_count <- count_countries("hs-rev2012/parquet")
+    hs02_count <- count_countries("hs-rev2002/parquet", y)
+    hs12_count <- count_countries("hs-rev2012/parquet", y)
 
     hs02_count <- length(unique(c(hs02_count$reporter_iso, hs02_count$partner_iso)))
     hs12_count <- length(unique(c(hs12_count$reporter_iso, hs12_count$partner_iso)))
@@ -353,23 +353,23 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE)
   cat(".")
 
   stopifnot(unique_pairs == nrow(dimp))
-  cat(".\n")
+  cat(".")
 
   messageline("Ordering columns.")
   dimp <- dimp %>%
     add_hs_section()
-  cat(".\n")
+  cat(".")
 
   # dimp %>%
   #   filter(section_code == "999")
 
   dimp <- dimp %>%
     mutate(year = year)
-  cat(".\n")
+  cat(".")
 
   dimp <- dimp %>%
     reported_by()
-  cat(".\n")
+  cat(".")
 
   return(dimp)
 }
