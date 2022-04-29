@@ -253,7 +253,7 @@ add_hs_section <- function(d) {
         select(!!sym("commodity_code"), !!sym("section_code")),
       by = "commodity_code"
     ) %>%
-    mutate(section_code = ifelse(is.na(!!sym("section_code")), "999", !!sym("section_code")))
+    mutate(section_code = ifelse(is.na(!!sym("section_code")), "99", !!sym("section_code")))
 }
 
 reported_by <- function(d) {
@@ -359,9 +359,6 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE)
   dimp <- dimp %>%
     add_hs_section()
   cat(".")
-
-  # dimp %>%
-  #   filter(section_code == "999")
 
   dimp <- dimp %>%
     mutate(year = year)
