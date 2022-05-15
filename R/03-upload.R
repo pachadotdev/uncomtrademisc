@@ -6,7 +6,7 @@
 con_tradestatistics <- function() {
   RPostgres::dbConnect(
     RPostgres::Postgres(),
-    host = "tradestatistics.io",
+    host = "localhost",
     user = Sys.getenv("TRADESTATISTICS_SQL_USR"),
     password = Sys.getenv("TRADESTATISTICS_SQL_PWD")
   )
@@ -31,12 +31,25 @@ update_countries <- function(con, path = "attributes") {
       country_name_english text DEFAULT NULL,
       country_fullname_english text DEFAULT NULL,
       continent_id integer DEFAULT NULL,
-      continent_name_english text DEFAULT NULL,
-      eu28_member integer DEFAULT NULL
+      continent_name_english text DEFAULT NULL
       )"
   )
 
   dbWriteTable(con, "countries", readRDS(paste0(path, "/countries.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
+
+  dbSendQuery(con, "DROP TABLE IF EXISTS public.countries_colors")
+
+  dbSendQuery(
+    con,
+    "CREATE TABLE public.countries_colors
+      (
+      continent_id integer DEFAULT NULL,
+      country_iso varchar(5) DEFAULT NULL,
+      country_color char(7) DEFAULT NULL
+      )"
+  )
+
+  dbWriteTable(con, "countries_colors", readRDS(paste0(path, "/countries_colors.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
 }
 
 #' Update commodities table
@@ -667,8 +680,7 @@ update_distances <- function(con) {
       colony integer DEFAULT NULL,
       comlang_ethno integer DEFAULT NULL,
       comlang_off integer DEFAULT NULL,
-      contig integer DEFAULT NULL,
-      smctry integer DEFAULT NULL
+      contig integer DEFAULT NULL
       )"
   )
 
@@ -688,15 +700,15 @@ update_distances <- function(con) {
   )
 
   d <- cepiigeodist::dist_cepii %>%
-    select(c("iso_o", "iso_d", "dist", "distcap",
-             "colony", "comlang_ethno", "comlang_off",
-             "contig", "smctry")) %>%
+    select(c("iso_o", "iso_d", "dist", "distcap", "colony", "comlang_ethno",
+             "comlang_off", "contig")) %>%
     mutate(
       country1 = tolower(pmin(!!sym("iso_o"), !!sym("iso_d"))),
       country2 = tolower(pmax(!!sym("iso_o"), !!sym("iso_d")))
     ) %>%
     select(-c("iso_o", "iso_d")) %>%
     select(c("country1", "country2"), everything()) %>%
+    group_by() %>%
     distinct()
 
   d <- d %>%
@@ -704,4 +716,29 @@ update_distances <- function(con) {
     inner_join(tradestatistics::ots_countries %>% select(country_iso), by = c("country2" = "country_iso"))
 
   dbWriteTable(con, "distances", d, append = TRUE, overwrite = FALSE, row.names = FALSE)
+}
+
+#' Update GDP deflator table
+#'
+#' Deletes and uploads the table again
+#'
+#' @param con SQL connection object
+#' @param path directory where the tidy data is
+#' @importFrom RPostgres dbSendQuery dbWriteTable
+#' @export
+update_gdp_deflator <- function(con, path = "attributes") {
+  dbSendQuery(con, "DROP TABLE IF EXISTS public.gdp_deflator")
+
+  dbSendQuery(
+    con,
+    "CREATE TABLE public.gdp_deflator
+      (
+      country_iso char(3) DEFAULT NULL,
+      year_from integer DEFAULT NULL,
+      year_to integer DEFAULT NULL,
+      gdp_deflator decimal(5,4) DEFAULT NULL
+      )"
+  )
+
+  dbWriteTable(con, "gdp_deflator", readRDS(paste0(path, "/gdp_deflator.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
 }

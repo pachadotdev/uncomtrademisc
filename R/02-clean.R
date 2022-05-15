@@ -21,25 +21,26 @@ filter_flow <- function(d, y, f, a = 6) {
   return(d)
 }
 
-# compute_ratios <- function(d) {
-#   d %>%
-#
-#     mutate(
-#       cif_fob_ratio = trade_value_usd_imp / trade_value_usd_exp
-#     ) %>%
-#
-#     mutate(
-#       cif_fob_ratio_ok = ifelse(
-#         cif_fob_ratio >= 1 & is.finite(cif_fob_ratio), 1L, 0L)
-#     ) %>%
-#
-#     # The unit or net CIF/FOB ratios can be weighted, or not, by the gap between
-#     # reported mirror quantities Min(Xij,Mji) / Max(Xij,Mji)
-#     mutate(
-#       cif_fob_weights = pmin(trade_value_usd_imp, trade_value_usd_exp, na.rm = T) /
-#         pmax(trade_value_usd_imp, trade_value_usd_exp, na.rm = T)
-#     )
-# }
+#' @export
+compute_ratios <- function(d) {
+  d %>%
+
+    mutate(
+      cif_fob_ratio = trade_value_usd_imp / trade_value_usd_exp
+    ) %>%
+
+    mutate(
+      cif_fob_ratio_ok = ifelse(
+        cif_fob_ratio >= 1 & is.finite(cif_fob_ratio), 1L, 0L)
+    ) %>%
+
+    # The unit or net CIF/FOB ratios can be weighted, or not, by the gap between
+    # reported mirror quantities Min(Xij,Mji) / Max(Xij,Mji)
+    mutate(
+      cif_fob_weights = pmin(trade_value_usd_imp, trade_value_usd_exp, na.rm = T) /
+        pmax(trade_value_usd_imp, trade_value_usd_exp, na.rm = T)
+    )
+}
 
 #' @importFrom arrow open_dataset
 count_countries <- function(path, y) {
@@ -146,7 +147,7 @@ data_partitioned <- function(y, f, replace_unspecified_iso) {
 #' @importFrom dplyr full_join
 join_flows <- function(dimp, dexp) {
   d <- dimp %>%
-    full_join(dexp, by = c("reporter_iso" = "partner_iso", "partner_iso" = "reporter_iso", "commodity_code")) %>%
+    full_join(dexp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
     rename(trade_value_usd_imp = !!sym("trade_value_usd.x"), trade_value_usd_exp = !!sym("trade_value_usd.y")) %>%
 
     mutate(
@@ -371,151 +372,56 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE)
   return(dimp)
 }
 
-# add_gravity_cols <- function(d, join = "left") {
-#   # Geographic variables come from the previous version of Gravity (legacy
-#   # version) and from Geodist. In the next version of BACI the more recent
-#   # Gravity dataset will be used.
-#
-#   d2 <- dist_cepii %>%
-#     select(reporter_iso = iso_o, partner_iso = iso_d, dist, contig, colony, comlang_off) %>%
-#     mutate_if(is.character, tolower) %>%
-#     mutate(
-#       reporter_iso = fix_iso_codes(reporter_iso),
-#       partner_iso = fix_iso_codes(partner_iso),
-#       contig = as.integer(contig),
-#       colony = as.integer(colony),
-#       comlang_off = as.integer(comlang_off)
-#     )
-#
-#   if (join == "left") {
-#     d %>%
-#       left_join(d2, by = c("reporter_iso", "partner_iso"))
-#   }
-#
-#   if (join == "inner") {
-#     d %>%
-#       inner_join(d2, by = c("reporter_iso", "partner_iso"))
-#   }
-# }
-#
-# add_rta_col <- function(d) {
-#   rtas <- open_dataset("../rtas-and-tariffs/rtas", partitioning = "year") %>%
-#     collect()
-#
-#   d <- d %>%
-#     mutate(
-#       country1 = pmin(reporter_iso, partner_iso),
-#       country2 = pmax(reporter_iso, partner_iso)
-#     ) %>%
-#     left_join(
-#       rtas %>%
-#         select(year, country1, country2, rta),
-#       by = c("year", "country1", "country2")
-#     ) %>%
-#     mutate(
-#       rta = as.integer(ifelse(is.na(rta), 0, rta))
-#     ) %>%
-#     select(-c(country1,country2))
-#
-#   return(d)
-# }
-#
-# add_sanctions_cols <- function(d, y) {
-#   dtrade <- gsdb_dyadic %>%
-#     select(year, sanctioned_state_iso3, trade_sanction = descr_trade) %>%
-#     filter(year == y) %>%
-#     filter(trade_sanction != "") %>%
-#     mutate(sanctioned_state_iso3 = tolower(sanctioned_state_iso3)) %>%
-#     distinct() %>%
-#     mutate(
-#       trade_sanction = case_when(
-#         trade_sanction == "exp_part" ~ "1_exports_partial",
-#         trade_sanction == "imp_part" ~ "2_imports_partial",
-#
-#         trade_sanction == "exp_part,imp_part" ~ "3_exports_and_imports_partial",
-#
-#         trade_sanction == "exp_compl" ~ "4_exports_complete",
-#         trade_sanction == "imp_compl" ~ "5_imports_complete",
-#
-#         trade_sanction == "exp_part,imp_compl" ~ "6_exports_partial_imports_complete",
-#         trade_sanction == "exp_compl,imp_part" ~ "7_exports_complete_imports_partial",
-#
-#         trade_sanction == "exp_compl,imp_compl" ~ "8_exports_and_imports_complete",
-#
-#         TRUE ~ ""
-#       )
-#     ) %>%
-#     select(-year) %>%
-#     group_by(sanctioned_state_iso3) %>%
-#     mutate(ind = substr(trade_sanction, 1, 1)) %>%
-#     filter(ind == max(ind)) %>%
-#     select(-ind)
-#
-#   # dtrade %>%
-#   #   select(trade_sanction, trade_sanction2) %>%
-#   #   distinct() %>%
-#   #   arrange(trade_sanction)
-#
-#   dfinancial <- gsdb_dyadic %>%
-#     select(year, sanctioned_state_iso3, financial_sanction = trade) %>%
-#     filter(year == y, financial_sanction == 1) %>%
-#     mutate(sanctioned_state_iso3 = tolower(sanctioned_state_iso3)) %>%
-#     distinct() %>%
-#     select(-year) %>%
-#     mutate(financial_sanction = as.integer(financial_sanction))
-#
-#   dmilitary <- gsdb_dyadic %>%
-#     select(year, sanctioned_state_iso3, military_sanction = trade) %>%
-#     filter(year == y, military_sanction == 1) %>%
-#     mutate(sanctioned_state_iso3 = tolower(sanctioned_state_iso3)) %>%
-#     distinct() %>%
-#     select(-year) %>%
-#     mutate(military_sanction = as.integer(military_sanction))
-#
-#   darms <- gsdb_dyadic %>%
-#     select(year, sanctioned_state_iso3, arms_sanction = trade) %>%
-#     filter(year == y, arms_sanction == 1) %>%
-#     mutate(sanctioned_state_iso3 = tolower(sanctioned_state_iso3)) %>%
-#     distinct() %>%
-#     select(-year) %>%
-#     mutate(arms_sanction = as.integer(arms_sanction))
-#
-#   d %>%
-#     left_join(dtrade, by = c("reporter_iso" = "sanctioned_state_iso3")) %>%
-#     left_join(dfinancial, by = c("reporter_iso" = "sanctioned_state_iso3")) %>%
-#     left_join(dmilitary, by = c("reporter_iso" = "sanctioned_state_iso3")) %>%
-#     left_join(darms, by = c("reporter_iso" = "sanctioned_state_iso3")) %>%
-#     rename(
-#       reporter_trade_sanction = trade_sanction,
-#       reporter_financial_sanction = financial_sanction,
-#       reporter_military_sanction = military_sanction,
-#       reporter_arms_sanction = arms_sanction
-#     ) %>%
-#
-#     left_join(dtrade, by = c("partner_iso" = "sanctioned_state_iso3")) %>%
-#     left_join(dfinancial, by = c("partner_iso" = "sanctioned_state_iso3")) %>%
-#     left_join(dmilitary, by = c("partner_iso" = "sanctioned_state_iso3")) %>%
-#     left_join(darms, by = c("partner_iso" = "sanctioned_state_iso3")) %>%
-#     rename(
-#       partner_trade_sanction = trade_sanction,
-#       partner_financial_sanction = financial_sanction,
-#       partner_military_sanction = military_sanction,
-#       partner_arms_sanction = arms_sanction
-#     ) %>%
-#
-#     mutate(
-#       reporter_trade_sanction = ifelse(is.na(reporter_trade_sanction), "0_no_sanction", reporter_trade_sanction),
-#       reporter_financial_sanction = ifelse(is.na(reporter_financial_sanction), 0L, reporter_financial_sanction),
-#       reporter_military_sanction = ifelse(is.na(reporter_military_sanction), 0L, reporter_military_sanction),
-#       reporter_arms_sanction = ifelse(is.na(reporter_arms_sanction), 0L, reporter_arms_sanction),
-#
-#       partner_trade_sanction = ifelse(is.na(partner_trade_sanction), "0_no_sanction", partner_trade_sanction),
-#       partner_financial_sanction = ifelse(is.na(partner_financial_sanction), 0L, partner_financial_sanction),
-#       partner_military_sanction = ifelse(is.na(partner_military_sanction), 0L, partner_military_sanction),
-#       partner_arms_sanction = ifelse(is.na(partner_arms_sanction), 0L, partner_arms_sanction)
-#     )
-# }
-#
+#' @export
+add_gravity_cols <- function(d, path = "attributes") {
+  distances <- readRDS(paste0(path, "/distances.rds"))
+
+  d <- d %>%
+    mutate(
+      country1 = pmin(!!sym("reporter_iso"), !!sym("partner_iso")),
+      country2 = pmax(!!sym("reporter_iso"), !!sym("partner_iso"))
+    ) %>%
+    inner_join(distances) %>%
+    select(-c("country1", "country2"))
+
+  return(d)
+}
+
+#' @export
+add_rta_col <- function(d, path = "mfn-rtas") {
+  rtas <- readRDS(paste0(path, "/rtas.rds"))
+
+  d <- d %>%
+    mutate(
+      country1 = pmin(!!sym("reporter_iso"), !!sym("partner_iso")),
+      country2 = pmax(!!sym("reporter_iso"), !!sym("partner_iso"))
+    ) %>%
+    left_join(
+      rtas %>%
+        select(c("year", "country1", "country2", "rta")),
+      by = c("year", "country1", "country2")
+    ) %>%
+    mutate(
+      rta = as.integer(ifelse(is.na(!!sym("rta")), 0, !!sym("rta")))
+    ) %>%
+    select(-c("country1", "country2"))
+
+  return(d)
+}
+
+#' @export
+filter_inter_quantile_range <- function(d) {
+  Q   <- quantile(d$cif_fob_ratio, probs = c(.25, .75), na.rm = FALSE)
+  iqr <- IQR(d$cif_fob_ratio)
+  up  <- Q[2] + 1.5 * iqr # Upper Range
+  low <- Q[1] - 1.5 * iqr # Lower Range
+
+  d %>%
+    filter(
+      cif_fob_ratio > low & cif_fob_ratio < up
+    )
+}
+
 # filter_flow_impute <- function(d, y, f, a) {
 #   d %>%
 #     filter(
@@ -570,15 +476,3 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE)
 # #       )
 # #     )
 # # }
-#
-# filter_inter_quantile_range <- function(d) {
-#   Q   <- quantile(d$cif_fob_ratio, probs = c(.25, .75), na.rm = FALSE)
-#   iqr <- IQR(d$cif_fob_ratio)
-#   up  <- Q[2] + 1.5 * iqr # Upper Range
-#   low <- Q[1] - 1.5 * iqr # Lower Range
-#
-#   d %>%
-#     filter(
-#       cif_fob_ratio > low & cif_fob_ratio < up
-#     )
-# }
