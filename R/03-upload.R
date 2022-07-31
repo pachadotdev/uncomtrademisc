@@ -735,12 +735,13 @@ update_tariffs <- function(con, path = "tariffs") {
 
   pmap(
     list(y = pairs$y, r = pairs$r, s = pairs$s),
-    function(y,r) {
-      message(y)
+    function(y,r,s) {
+      message(paste(y,r,s))
       d2 <- d %>%
-        filter(!!sym("year") == y, !!sym("reporter_iso") == r) %>%
+        filter(!!sym("year") == y, !!sym("reporter_iso") == r, !!sym("section_code") == s) %>%
         collect() %>%
-        select(-!!sym("section_code"))
+        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+               !!sym("section_code"), !!sym("commodity_code"), !!sym("tariff"))
 
       dbWriteTable(con, "tariffs", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
     }
