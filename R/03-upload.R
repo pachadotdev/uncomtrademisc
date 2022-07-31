@@ -628,8 +628,8 @@ update_tariffs <- function(con, path = "tariffs") {
     "CREATE TABLE public.tariffs
       (
       year integer NOT NULL,
-      reporter_iso char(3) DEFAULT NULL,
-      partner_iso char(3) DEFAULT NULL,
+      reporter_iso char(5) DEFAULT NULL,
+      partner_iso char(5) DEFAULT NULL,
       section_code char(2) NOT NULL,
       commodity_code char(6) NOT NULL,
       tariff decimal(5,2) DEFAULT NULL
