@@ -745,7 +745,12 @@ update_tariffs <- function(con, path = "tariffs") {
         select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
                !!sym("section_code"), !!sym("commodity_code"), !!sym("tariff"))
 
-      dbWriteTable(con, "tariffs", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
+      if (nrow(d2) > 0) {
+        dbWriteTable(con, "tariffs", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
+        return(TRUE)
+      } else {
+        return(TRUE)
+      }
     }
   )
 }
