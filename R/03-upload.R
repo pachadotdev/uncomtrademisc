@@ -617,6 +617,7 @@ update_rtas <- function(con, path = "rtas") {
 #' @param con SQL connection object
 #' @param path directory where the tidy data is
 #' @importFrom purrr pmap
+#' @importFrom arrow schema int32 string
 #' @importFrom RPostgres dbSendQuery dbWriteTable
 #' @export
 update_tariffs <- function(con, path = "tariffs") {
@@ -715,7 +716,8 @@ update_tariffs <- function(con, path = "tariffs") {
     "CREATE INDEX tariffs_yps ON public.tariffs (year, partner_iso, section_code)"
   )
 
-  d <- open_dataset(path, partitioning = c("year", "reporter_iso", "section_code"))
+  d <- open_dataset(path, partitioning = schema(year = int32(), reporter_iso = string(),
+                                                section_code = string()))
 
   y <- 2002:2020
   r <- d %>%
