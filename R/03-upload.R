@@ -752,7 +752,7 @@ update_tariffs <- function(con, path = "tariffs") {
                !!sym("section_code"), !!sym("commodity_code"), !!sym("tariff"))
 
       d2 <- d2 %>%
-        inner_join(d2)
+        inner_join(d_current)
 
       if (nrow(d2) > 0) {
         dbWriteTable(con, "tariffs", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
