@@ -35,8 +35,6 @@ update_countries <- function(con, path = "attributes") {
       )"
   )
 
-  dbWriteTable(con, "countries", readRDS(paste0(path, "/countries.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
-
   dbSendQuery(con, "DROP TABLE IF EXISTS public.countries_colors")
 
   dbSendQuery(
@@ -48,6 +46,8 @@ update_countries <- function(con, path = "attributes") {
       country_color char(7) DEFAULT NULL
       )"
   )
+
+  dbWriteTable(con, "countries", readRDS(paste0(path, "/countries.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
 
   dbWriteTable(con, "countries_colors", readRDS(paste0(path, "/countries_colors.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
 }
@@ -74,9 +74,6 @@ update_commodities <- function(con, path = "attributes") {
       )"
   )
 
-  dbWriteTable(con, "commodities", readRDS(paste0(path, "/commodities.rds")),
-               append = TRUE, overwrite = FALSE, row.names = FALSE)
-
   dbSendQuery(con, "DROP TABLE IF EXISTS public.commodities_short")
 
   dbSendQuery(
@@ -87,6 +84,9 @@ update_commodities <- function(con, path = "attributes") {
       commodity_fullname_english text DEFAULT NULL
       )"
   )
+
+  dbWriteTable(con, "commodities", readRDS(paste0(path, "/commodities.rds")),
+               append = TRUE, overwrite = FALSE, row.names = FALSE)
 
   dbWriteTable(con, "commodities_short", readRDS(paste0(path, "/commodities_short.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
 }
@@ -111,9 +111,6 @@ update_sections <- function(con, path = "attributes") {
       )"
   )
 
-  dbWriteTable(con, "sections", readRDS(paste0(path, "/sections.rds")),
-               append = TRUE, overwrite = FALSE, row.names = FALSE)
-
   dbSendQuery(con, "DROP TABLE IF EXISTS public.sections_colors")
 
   dbSendQuery(
@@ -124,6 +121,9 @@ update_sections <- function(con, path = "attributes") {
       section_color char(7) DEFAULT NULL
       )"
   )
+
+  dbWriteTable(con, "sections", readRDS(paste0(path, "/sections.rds")),
+               append = TRUE, overwrite = FALSE, row.names = FALSE)
 
   dbWriteTable(con, "sections_colors", readRDS(paste0(path, "/sections_colors.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
 
@@ -157,6 +157,21 @@ update_yr <- function(con, path = "hs-rev2012-tidy") {
 
   y <- 2002:2020
 
+  dbSendQuery(
+    con,
+    "CREATE INDEX yr_y ON public.yr (year)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX yr_r ON public.yr (reporter_iso)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX yr_yr ON public.yr (year, reporter_iso)"
+  )
+
   map(
     y,
     function(y) {
@@ -174,21 +189,6 @@ update_yr <- function(con, path = "hs-rev2012-tidy") {
 
       dbWriteTable(con, "yr", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
     }
-  )
-
-  dbSendQuery(
-    con,
-    "CREATE INDEX yr_y ON public.yr (year)"
-  )
-
-  dbSendQuery(
-    con,
-    "CREATE INDEX yr_r ON public.yr (reporter_iso)"
-  )
-
-  dbSendQuery(
-    con,
-    "CREATE INDEX yr_yr ON public.yr (year, reporter_iso)"
   )
 }
 
@@ -217,29 +217,6 @@ update_yrp <- function(con, path = "hs-rev2012-tidy") {
       )"
   )
 
-  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
-
-  y <- 2002:2020
-
-  map(
-    y,
-    function(y) {
-      message(y)
-      d2 <- d %>%
-        filter(!!sym("year") == y) %>%
-        collect() %>%
-        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso")) %>%
-        summarise(
-          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
-          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
-        ) %>%
-        ungroup() %>%
-        arrange(!!sym("reporter_iso"), !!sym("partner_iso"))
-
-      dbWriteTable(con, "yrp", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
-    }
-  )
-
   dbSendQuery(
     con,
     "CREATE INDEX yrp_y ON public.yrp (year)"
@@ -263,6 +240,29 @@ update_yrp <- function(con, path = "hs-rev2012-tidy") {
   dbSendQuery(
     con,
     "CREATE INDEX yrp_yp ON public.yrp (year, partner_iso)"
+  )
+
+  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
+
+  y <- 2002:2020
+
+  map(
+    y,
+    function(y) {
+      message(y)
+      d2 <- d %>%
+        filter(!!sym("year") == y) %>%
+        collect() %>%
+        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso")) %>%
+        summarise(
+          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
+          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
+        ) %>%
+        ungroup() %>%
+        arrange(!!sym("reporter_iso"), !!sym("partner_iso"))
+
+      dbWriteTable(con, "yrp", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
+    }
   )
 }
 
@@ -292,38 +292,6 @@ update_yrpc <- function(con, path = "hs-rev2012-tidy") {
       trade_value_usd_imp decimal(16,2) DEFAULT NULL,
       trade_value_usd_exp decimal(16,2) DEFAULT NULL
       )"
-  )
-
-  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
-
-  y <- 2002:2020
-  r <- d %>%
-    select(!!sym("reporter_iso")) %>%
-    distinct() %>%
-    collect() %>%
-    pull() %>%
-    sort()
-
-  pairs <- expand_grid(y,r)
-
-  map2(
-    pairs$y,
-    pairs$r,
-    function(y,r) {
-      message(paste(y,r))
-      d2 <- d %>%
-        filter(!!sym("year") == y, !!sym("reporter_iso") == r) %>%
-        collect() %>%
-        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"), !!sym("section_code"), !!sym("commodity_code")) %>%
-        summarise(
-          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
-          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
-        ) %>%
-        ungroup() %>%
-        arrange(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("section_code"), !!sym("commodity_code"))
-
-      dbWriteTable(con, "yrpc", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
-    }
   )
 
   dbSendQuery(
@@ -405,6 +373,38 @@ update_yrpc <- function(con, path = "hs-rev2012-tidy") {
     con,
     "CREATE INDEX yrpc_yps ON public.yrpc (year, partner_iso, section_code)"
   )
+
+  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
+
+  y <- 2002:2020
+  r <- d %>%
+    select(!!sym("reporter_iso")) %>%
+    distinct() %>%
+    collect() %>%
+    pull() %>%
+    sort()
+
+  pairs <- expand_grid(y,r)
+
+  map2(
+    pairs$y,
+    pairs$r,
+    function(y,r) {
+      message(paste(y,r))
+      d2 <- d %>%
+        filter(!!sym("year") == y, !!sym("reporter_iso") == r) %>%
+        collect() %>%
+        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"), !!sym("section_code"), !!sym("commodity_code")) %>%
+        summarise(
+          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
+          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
+        ) %>%
+        ungroup() %>%
+        arrange(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("section_code"), !!sym("commodity_code"))
+
+      dbWriteTable(con, "yrpc", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
+    }
+  )
 }
 
 #' Update YRC table
@@ -431,29 +431,6 @@ update_yrc <- function(con, path = "hs-rev2012-tidy") {
       trade_value_usd_imp decimal(16,2) DEFAULT NULL,
       trade_value_usd_exp decimal(16,2) DEFAULT NULL
       )"
-  )
-
-  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
-
-  y <- 2002:2020
-
-  map(
-    y,
-    function(y) {
-      message(y)
-      d2 <- d %>%
-        filter(!!sym("year") == y) %>%
-        collect() %>%
-        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("section_code"), !!sym("commodity_code")) %>%
-        summarise(
-          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
-          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
-        ) %>%
-        ungroup() %>%
-        arrange(!!sym("reporter_iso"), !!sym("section_code"))
-
-      dbWriteTable(con, "yrc", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
-    }
   )
 
   dbSendQuery(
@@ -500,6 +477,29 @@ update_yrc <- function(con, path = "hs-rev2012-tidy") {
     con,
     "CREATE INDEX yrc_rc ON public.yrc (reporter_iso, commodity_code)"
   )
+
+  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
+
+  y <- 2002:2020
+
+  map(
+    y,
+    function(y) {
+      message(y)
+      d2 <- d %>%
+        filter(!!sym("year") == y) %>%
+        collect() %>%
+        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("section_code"), !!sym("commodity_code")) %>%
+        summarise(
+          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
+          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
+        ) %>%
+        ungroup() %>%
+        arrange(!!sym("reporter_iso"), !!sym("section_code"))
+
+      dbWriteTable(con, "yrc", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
+    }
+  )
 }
 
 #' Update YC table
@@ -527,29 +527,6 @@ update_yc <- function(con, path = "hs-rev2012-tidy") {
       )"
   )
 
-  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
-
-  y <- 2002:2020
-
-  map(
-    y,
-    function(y) {
-      message(y)
-      d2 <- d %>%
-        filter(!!sym("year") == y) %>%
-        collect() %>%
-        group_by(!!sym("year"), !!sym("section_code"), !!sym("commodity_code")) %>%
-        summarise(
-          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
-          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
-        ) %>%
-        ungroup() %>%
-        arrange(!!sym("section_code"))
-
-      dbWriteTable(con, "yc", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
-    }
-  )
-
   dbSendQuery(
     con,
     "CREATE INDEX yc_y ON public.yc (year)"
@@ -574,6 +551,29 @@ update_yc <- function(con, path = "hs-rev2012-tidy") {
     con,
     "CREATE INDEX yc_yc ON public.yc (year, commodity_code)"
   )
+
+  d <- open_dataset(path, partitioning = c("year", "reporter_iso"))
+
+  y <- 2002:2020
+
+  map(
+    y,
+    function(y) {
+      message(y)
+      d2 <- d %>%
+        filter(!!sym("year") == y) %>%
+        collect() %>%
+        group_by(!!sym("year"), !!sym("section_code"), !!sym("commodity_code")) %>%
+        summarise(
+          trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
+          trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T)
+        ) %>%
+        ungroup() %>%
+        arrange(!!sym("section_code"))
+
+      dbWriteTable(con, "yc", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
+    }
+  )
 }
 
 #' Update RTAs table
@@ -584,7 +584,7 @@ update_yc <- function(con, path = "hs-rev2012-tidy") {
 #' @param path directory where the tidy data is
 #' @importFrom RPostgres dbSendQuery dbWriteTable
 #' @export
-update_rtas <- function(con, path = "mfn-rtas") {
+update_rtas <- function(con, path = "rtas") {
   dbSendQuery(con, "DROP TABLE IF EXISTS public.rtas")
 
   dbSendQuery(
@@ -603,7 +603,11 @@ update_rtas <- function(con, path = "mfn-rtas") {
     "CREATE INDEX rtas_y ON public.rtas (year)"
   )
 
-  dbWriteTable(con, "rtas", readRDS(paste0(path, "/rtas.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
+  d <- readRDS("rtas/rtas.rds")
+
+  y <- 2002:2020
+
+  dbWriteTable(con, "rtas", d, append = TRUE, overwrite = FALSE, row.names = FALSE)
 }
 
 #' Update tariffs table
@@ -612,9 +616,10 @@ update_rtas <- function(con, path = "mfn-rtas") {
 #'
 #' @param con SQL connection object
 #' @param path directory where the tidy data is
+#' @importFrom purrr pmap
 #' @importFrom RPostgres dbSendQuery dbWriteTable
 #' @export
-update_tariffs <- function(con, path = "mfn-rtas") {
+update_tariffs <- function(con, path = "tariffs") {
   dbSendQuery(con, "DROP TABLE IF EXISTS public.tariffs")
 
   dbSendQuery(
@@ -623,17 +628,10 @@ update_tariffs <- function(con, path = "mfn-rtas") {
       (
       year integer NOT NULL,
       reporter_iso char(3) DEFAULT NULL,
-      commodity_code char(6) DEFAULT NULL,
-      sum_of_rates decimal(7,2) DEFAULT NULL,
-      min_rate decimal(7,2) DEFAULT NULL,
-      max_rate decimal(7,2) DEFAULT NULL,
-      simple_average decimal(7,2) DEFAULT NULL,
-      nbr_na_lines integer DEFAULT NULL,
-      nbr_free_lines integer DEFAULT NULL,
-      nbr_ave_lines integer DEFAULT NULL,
-      nbr_dutiable_lines integer DEFAULT NULL,
-      total_no_of_valid_lines integer DEFAULT NULL,
-      total_no_of_lines integer DEFAULT NULL
+      partner_iso char(3) DEFAULT NULL,
+      section_code char(2) NOT NULL,
+      commodity_code char(6) NOT NULL,
+      tariff decimal(5,2) DEFAULT NULL
       )"
   )
 
@@ -642,16 +640,107 @@ update_tariffs <- function(con, path = "mfn-rtas") {
     "CREATE INDEX tariffs_y ON public.tariffs (year)"
   )
 
-  d <- readRDS(paste0(path, "/tariffs.rds"))
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_r ON public.tariffs (reporter_iso)"
+  )
 
-  map(
-    2002:2020,
-    function(y) {
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_p ON public.tariffs (partner_iso)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_c ON public.tariffs (commodity_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_s ON public.tariffs (section_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_yr ON public.tariffs (year, reporter_iso)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_yp ON public.tariffs (year, partner_iso)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_yc ON public.tariffs (year, commodity_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_ys ON public.tariffs (year, section_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_rp ON public.tariffs (reporter_iso, partner_iso)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_rpc ON public.tariffs (reporter_iso, partner_iso, commodity_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_yrp ON public.tariffs (year, reporter_iso, partner_iso)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_yrc ON public.tariffs (year, reporter_iso, commodity_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_yrs ON public.tariffs (year, reporter_iso, section_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_ypc ON public.tariffs (year, partner_iso, commodity_code)"
+  )
+
+  dbSendQuery(
+    con,
+    "CREATE INDEX tariffs_yps ON public.tariffs (year, partner_iso, section_code)"
+  )
+
+  d <- open_dataset(path, partitioning = c("year", "reporter_iso", "section_code"))
+
+  y <- 2002:2020
+  r <- d %>%
+    select(!!sym("reporter_iso")) %>%
+    distinct() %>%
+    collect() %>%
+    pull() %>%
+    sort()
+  s <- d %>%
+    select(!!sym("section_code")) %>%
+    distinct() %>%
+    collect() %>%
+    pull() %>%
+    sort()
+
+  pairs <- expand_grid(y,r,s)
+
+  pmap(
+    list(y = pairs$y, r = pairs$r, s = pairs$s),
+    function(y,r) {
       message(y)
       d2 <- d %>%
-        filter(!!sym("year") == y) %>%
+        filter(!!sym("year") == y, !!sym("reporter_iso") == r) %>%
         collect() %>%
-        arrange(!!sym("reporter_iso"), !!sym("commodity_code"))
+        select(-!!sym("section_code"))
 
       dbWriteTable(con, "tariffs", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
     }
@@ -733,12 +822,82 @@ update_gdp_deflator <- function(con, path = "attributes") {
     con,
     "CREATE TABLE public.gdp_deflator
       (
-      country_iso char(3) DEFAULT NULL,
       year_from integer DEFAULT NULL,
       year_to integer DEFAULT NULL,
+      country_iso char(3) DEFAULT NULL,
       gdp_deflator decimal(5,4) DEFAULT NULL
       )"
   )
 
   dbWriteTable(con, "gdp_deflator", readRDS(paste0(path, "/gdp_deflator.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
+}
+
+#' Update GDP table
+#'
+#' Deletes and uploads the table again
+#'
+#' @param con SQL connection object
+#' @param path directory where the tidy data is
+#' @importFrom RPostgres dbSendQuery dbWriteTable
+#' @export
+update_gdp <- function(con, path = "attributes") {
+  dbSendQuery(con, "DROP TABLE IF EXISTS public.gdp")
+
+  dbSendQuery(
+    con,
+    "CREATE TABLE public.gdp
+      (
+      year integer DEFAULT NULL,
+      country_iso char(3) DEFAULT NULL,
+      gdp decimal(16,2) DEFAULT NULL,
+      gdp_percap decimal(16,2) DEFAULT NULL
+      )"
+  )
+
+  dbWriteTable(con, "gdp", readRDS(paste0(path, "/gdp.rds")), append = TRUE, overwrite = FALSE, row.names = FALSE)
+}
+
+#' Update Vaccine Inputs table
+#'
+#' Deletes and uploads the table again
+#'
+#' @param con SQL connection object
+#' @importFrom RPostgres dbSendQuery dbWriteTable
+#' @export
+update_vaccine_inputs <- function(con) {
+  dbSendQuery(con, "DROP TABLE IF EXISTS public.vaccine_inputs")
+
+  dbSendQuery(
+    con,
+    "CREATE TABLE public.vaccine_inputs
+      (
+      commodity_code char(6) DEFAULT NULL,
+      is_vaccine_input integer DEFAULT NULL
+      )"
+  )
+
+  dbWriteTable(con, "vaccine_inputs",
+               data.frame(
+                 stringsAsFactors = FALSE,
+                 commodity_code = c("170199","220710","220720",
+                                    "220890","250100","280610","281121","281511","281512",
+                                    "282731","283330","283522","283524","285210",
+                                    "285390","290544","290613","291211","291521","291529",
+                                    "291814","291815","292219","292249","292250","292320",
+                                    "293329","294190","300220","300510","310420",
+                                    "340213","350300","350510","350790","382100","382200",
+                                    "391740","392310","392321","392329","392330","392690",
+                                    "401511","401519","401699","482110","482190",
+                                    "701090","701710","701720","701790","830990","841830",
+                                    "841840","841920","841989","842129","842230","847982",
+                                    "847989","854370","901831","901832","902720","902790",
+                                    "903289"),
+                 is_vaccine_input = c(1L,1L,1L,1L,1L,1L,1L,1L,
+                                      1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,
+                                      1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,
+                                      1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,
+                                      1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,1L,
+                                      1L,1L)
+               ),
+               append = TRUE, overwrite = FALSE, row.names = FALSE)
 }
