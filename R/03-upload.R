@@ -629,8 +629,9 @@ update_tariffs <- function(con, path = "tariffs") {
     "CREATE TABLE public.tariffs
       (
       year integer NOT NULL,
-      reporter_iso char(5) DEFAULT NULL,
-      partner_iso char(5) DEFAULT NULL,
+      source char(3) DEFAULT NULL,
+      reporter_iso varchar(5) DEFAULT NULL,
+      partner_iso varchar(5) DEFAULT NULL,
       section_code char(2) NOT NULL,
       commodity_code char(6) NOT NULL,
       tariff decimal(6,2) DEFAULT NULL
@@ -727,32 +728,59 @@ update_tariffs <- function(con, path = "tariffs") {
     collect() %>%
     pull() %>%
     sort()
-  s <- d %>%
+
+  pairs <- expand_grid(y,r)
+
+  sections <- tbl(con, "commodities") %>%
     select(!!sym("section_code")) %>%
     distinct() %>%
     collect() %>%
     pull() %>%
     sort()
 
-  pairs <- expand_grid(y,r,s)
-
-  d_current <- tbl(con, "yrpc") %>%
-    filter(!!sym("year") == y) %>%
-    select(!!sym("reporter_iso"), !!sym("partner_iso")) %>%
-    collect()
-
   pmap(
-    list(y = pairs$y, r = pairs$r, s = pairs$s),
-    function(y,r,s) {
-      message(paste(y,r,s))
-      d2 <- d %>%
-        filter(!!sym("year") == y, !!sym("reporter_iso") == r, !!sym("section_code") == s) %>%
-        collect() %>%
-        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-               !!sym("section_code"), !!sym("commodity_code"), !!sym("tariff"))
+    list(y = pairs$y, r = pairs$r),
+    function(y,r) {
+      message(paste(y,r))
+      d_current <- tbl(con, "yrpc") %>%
+        filter(!!sym("year") == y, !!sym("reporter_iso") == r) %>%
+        filter(!!sym("trade_value_usd_imp") > 0) %>%
+        select(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
+        collect()
 
-      d2 <- d2 %>%
-        inner_join(d_current)
+      d2 <- map_df(
+        sections,
+        function(s) {
+          message(s)
+          d %>%
+            filter(!!sym("year") == y, !!sym("reporter_iso") == r,
+                   !!sym("section_code") == s) %>%
+            collect() %>%
+            select(!!sym("year"), !!sym("source"), !!sym("reporter_iso"), !!sym("partner_iso"),
+                   !!sym("section_code"), !!sym("commodity_code"), !!sym("tariff")) %>%
+            inner_join(d_current)
+        }
+      )
+
+      # d2 <- d2 %>%
+      #   group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+      #            !!sym("section_code"), !!sym("commodity_code")) %>%
+      #   summarise(tariff = min(!!sym("tariff"), na.rm = TRUE)) %>%
+      #   filter(is.finite(!!sym("tariff")))
+
+      stopifnot(
+        all.equal(
+          d2 %>%
+            select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+                   !!sym("section_code"), !!sym("commodity_code")) %>%
+            nrow(),
+          d2 %>%
+            select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+                   !!sym("section_code"), !!sym("commodity_code")) %>%
+            distinct() %>%
+            nrow()
+        )
+      )
 
       if (nrow(d2) > 0) {
         dbWriteTable(con, "tariffs", d2, append = TRUE, overwrite = FALSE, row.names = FALSE)
