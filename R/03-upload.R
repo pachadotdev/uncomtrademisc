@@ -634,7 +634,7 @@ update_tariffs <- function(con, path = "tariffs") {
       partner_iso varchar(5) DEFAULT NULL,
       section_code char(2) NOT NULL,
       commodity_code char(6) NOT NULL,
-      tariff decimal(5,2) DEFAULT NULL
+      tariff decimal(6,2) DEFAULT NULL
       )"
   )
 
