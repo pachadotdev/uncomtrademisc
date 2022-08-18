@@ -634,7 +634,7 @@ update_tariffs <- function(con, path = "tariffs") {
       partner_iso varchar(5) DEFAULT NULL,
       section_code char(2) NOT NULL,
       commodity_code char(6) NOT NULL,
-      tariff decimal(6,2) DEFAULT NULL
+      tariff decimal(5,2) DEFAULT NULL
       )"
   )
 
@@ -758,15 +758,10 @@ update_tariffs <- function(con, path = "tariffs") {
             collect() %>%
             select(!!sym("year"), !!sym("source"), !!sym("reporter_iso"), !!sym("partner_iso"),
                    !!sym("section_code"), !!sym("commodity_code"), !!sym("tariff")) %>%
-            inner_join(d_current)
+            inner_join(d_current) %>%
+            filter(!!sym("tariff") > 0)
         }
       )
-
-      # d2 <- d2 %>%
-      #   group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-      #            !!sym("section_code"), !!sym("commodity_code")) %>%
-      #   summarise(tariff = min(!!sym("tariff"), na.rm = TRUE)) %>%
-      #   filter(is.finite(!!sym("tariff")))
 
       stopifnot(
         all.equal(
