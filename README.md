@@ -11,15 +11,6 @@ remotes::install_github("pachadotdev/uncomtrademisc")
 This one-liner will install the next packages if needed: *arrow, dplyr, stringr,
 purrr, janitor, RPostgres, cepiigeodist.*
 
-```r
-library(arrow)
-library(dplyr)
-library(stringr)
-library(janitor)
-library(purrr)
-library(uncomtrademisc)
-```
-
 ## Usage
 
 This is a summary of the [tradestatistics-database-postgresql repository](https://github.com/tradestatistics/tradestatistics-database-postgresql).
