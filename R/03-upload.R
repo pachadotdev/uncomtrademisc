@@ -6,7 +6,8 @@
 con_tradestatistics <- function() {
   RPostgres::dbConnect(
     RPostgres::Postgres(),
-    host = "localhost",
+    host = Sys.getenv("TRADESTATISTICS_SQL_HOST"),
+    dbname = Sys.getenv("TRADESTATISTICS_SQL_DB"),
     user = Sys.getenv("TRADESTATISTICS_SQL_USR"),
     password = Sys.getenv("TRADESTATISTICS_SQL_PWD")
   )
