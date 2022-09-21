@@ -4,7 +4,13 @@
 \alias{tidy_flows}
 \title{Reshape UN COMTRADE bulk datasets to put these under tidy data format}
 \usage{
-tidy_flows(year, subtract_re = TRUE, replace_unspecified_iso = TRUE)
+tidy_flows(
+  year,
+  subtract_re = TRUE,
+  replace_unspecified_iso = TRUE,
+  path = "hs-rev2002/parquet",
+  path2 = "hs-rev2012/parquet"
+)
 }
 \arguments{
 \item{year}{which year to reshape}
@@ -14,6 +20,10 @@ when the result is negative, it is converted to 0}
 
 \item{replace_unspecified_iso}{convert all ocurrences of `0-unspecified` to
 `e-[0-9]` (i.e., `e-439` when corresponding)}
+
+\item{path}{the route to the folder with the parquet files for HS02 data}
+
+\item{path2}{the route to the folder with the parquet files for HS12 data}
 }
 \description{
 This wrapper takes the raw data and re-expresses it under the Tidy Data

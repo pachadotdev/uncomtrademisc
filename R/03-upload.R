@@ -617,7 +617,7 @@ update_rtas <- function(con, path = "rtas") {
 #'
 #' @param con SQL connection object
 #' @param path directory where the tidy data is
-#' @importFrom purrr pmap
+#' @importFrom purrr pmap map_df
 #' @importFrom arrow schema int32 string
 #' @importFrom dplyr tbl
 #' @importFrom RPostgres dbSendQuery dbWriteTable
@@ -842,8 +842,10 @@ update_distances <- function(con) {
     distinct()
 
   d <- d %>%
-    inner_join(tradestatistics::ots_countries %>% select(country_iso), by = c("country1" = "country_iso")) %>%
-    inner_join(tradestatistics::ots_countries %>% select(country_iso), by = c("country2" = "country_iso"))
+    inner_join(tradestatistics::ots_countries %>% select(!!sym("country_iso")),
+               by = c("country1" = "country_iso")) %>%
+    inner_join(tradestatistics::ots_countries %>% select(!!sym("country_iso")),
+               by = c("country2" = "country_iso"))
 
   dbWriteTable(con, "distances", d, append = TRUE, overwrite = FALSE, row.names = FALSE)
 }

@@ -9,7 +9,7 @@ Description: Download and tidy UN COMTRADE data, including wrappers to easily
 License: Apache License (>= 2)
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.2.0
+RoxygenNote: 7.2.1
 Imports: 
     arrow,
     cepiigeodist,

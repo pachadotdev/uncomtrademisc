@@ -21,24 +21,28 @@ filter_flow <- function(d, y, f, a = 6) {
   return(d)
 }
 
+#' Add CIF/FOB ratios to trade dataset
+#' @param d dataset to add CIF/FOB ratios to
 #' @export
 compute_ratios <- function(d) {
   d %>%
 
     mutate(
-      cif_fob_ratio = trade_value_usd_imp / trade_value_usd_exp
+      cif_fob_ratio = !!sym("trade_value_usd_imp") / !!sym("trade_value_usd_exp")
     ) %>%
 
     mutate(
       cif_fob_ratio_ok = ifelse(
-        cif_fob_ratio >= 1 & is.finite(cif_fob_ratio), 1L, 0L)
+        !!sym("cif_fob_ratio") >= 1 & is.finite(!!sym("cif_fob_ratio")), 1L, 0L)
     ) %>%
 
     # The unit or net CIF/FOB ratios can be weighted, or not, by the gap between
     # reported mirror quantities Min(Xij,Mji) / Max(Xij,Mji)
     mutate(
-      cif_fob_weights = pmin(trade_value_usd_imp, trade_value_usd_exp, na.rm = T) /
-        pmax(trade_value_usd_imp, trade_value_usd_exp, na.rm = T)
+      cif_fob_weights = pmin(!!sym("trade_value_usd_imp"),
+                             !!sym("trade_value_usd_exp"), na.rm = T) /
+        pmax(!!sym("trade_value_usd_imp"),
+             !!sym("trade_value_usd_exp"), na.rm = T)
     )
 }
 
@@ -62,26 +66,28 @@ open_dataset_partitioning <- function(path) {
 }
 
 #' @importFrom dplyr summarise
-data_partitioned <- function(y, f, replace_unspecified_iso) {
+data_partitioned <- function(y, f, replace_unspecified_iso,
+                             path = "hs-rev2002/parquet",
+                             path2 = "hs-rev2012/parquet") {
   cat("reading data.")
 
   if (y >= 2012) {
-    hs02_count <- count_countries("hs-rev2002/parquet", y)
-    hs12_count <- count_countries("hs-rev2012/parquet", y)
+    hs02_count <- count_countries(path, y)
+    hs12_count <- count_countries(path2, y)
 
     hs02_count <- length(unique(c(hs02_count$reporter_iso, hs02_count$partner_iso)))
     hs12_count <- length(unique(c(hs12_count$reporter_iso, hs12_count$partner_iso)))
 
     d <- if (hs12_count >= hs02_count) {
-      open_dataset_partitioning("hs-rev2012/parquet")
+      open_dataset_partitioning(path2)
     } else {
-      open_dataset_partitioning("hs-rev2002/parquet")
+      open_dataset_partitioning(path)
     }
 
     use_hs12 <- ifelse(hs12_count >= hs02_count, TRUE, FALSE)
     cat(".")
   } else {
-    d <- open_dataset_partitioning("hs-rev2002/parquet")
+    d <- open_dataset_partitioning(path)
     use_hs12 <- FALSE
     cat(".")
   }
@@ -297,14 +303,17 @@ subtract_re_imp_exp <- function(d) {
 #' when the result is negative, it is converted to 0
 #' @param replace_unspecified_iso convert all ocurrences of `0-unspecified` to
 #' `e-[0-9]` (i.e., `e-439` when corresponding)
+#' @param path the route to the folder with the parquet files for HS02 data
+#' @param path2 the route to the folder with the parquet files for HS12 data
 #'
 #' @export
-tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE) {
+tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE,
+                       path = "hs-rev2002/parquet", path2 = "hs-rev2012/parquet") {
   messageline("Reading Imports data")
-  dimp <- data_partitioned(y = year, f = "import", replace_unspecified_iso)
+  dimp <- data_partitioned(y = year, f = "import", replace_unspecified_iso, path, path2)
   cat(".")
   if (isTRUE(subtract_re)) {
-    dreimp <- data_partitioned(y = year, f = "re-import", replace_unspecified_iso)
+    dreimp <- data_partitioned(y = year, f = "re-import", replace_unspecified_iso, path, path2)
     cat(".")
     dimp <- dimp %>%
       left_join(dreimp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
@@ -315,11 +324,11 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE)
   }
 
   messageline("Exports")
-  dexp <- data_partitioned(y = year, f = "export", replace_unspecified_iso)
+  dexp <- data_partitioned(y = year, f = "export", replace_unspecified_iso, path, path2)
   cat(".")
 
   if (isTRUE(subtract_re)) {
-    dreexp <- data_partitioned(y = year, f = "re-export", replace_unspecified_iso)
+    dreexp <- data_partitioned(y = year, f = "re-export", replace_unspecified_iso, path, path2)
     cat(".")
     dexp <- dexp %>%
       left_join(dreexp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
@@ -372,6 +381,9 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE)
   return(dimp)
 }
 
+#' Add bilateral distances to trade dataset
+#' @param d dataset to add distances to
+#' @param path where to find distances dataset
 #' @export
 add_gravity_cols <- function(d, path = "attributes") {
   distances <- readRDS(paste0(path, "/distances.rds"))
@@ -387,6 +399,9 @@ add_gravity_cols <- function(d, path = "attributes") {
   return(d)
 }
 
+#' Add RTAs to trade dataset
+#' @param d dataset to add RTAs to
+#' @param path where to find RTAs dataset
 #' @export
 add_rta_col <- function(d, path = "mfn-rtas") {
   rtas <- readRDS(paste0(path, "/rtas.rds"))
@@ -409,6 +424,9 @@ add_rta_col <- function(d, path = "mfn-rtas") {
   return(d)
 }
 
+#' Filter trade dataset based on IQR
+#' @param d dataset to filter
+#' @importFrom stats IQR quantile
 #' @export
 filter_inter_quantile_range <- function(d) {
   Q   <- quantile(d$cif_fob_ratio, probs = c(.25, .75), na.rm = FALSE)
@@ -418,7 +436,7 @@ filter_inter_quantile_range <- function(d) {
 
   d %>%
     filter(
-      cif_fob_ratio > low & cif_fob_ratio < up
+      !!sym("cif_fob_ratio") > low & !!sym("cif_fob_ratio") < up
     )
 }
 
