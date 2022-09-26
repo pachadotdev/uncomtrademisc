@@ -4,10 +4,13 @@
 \alias{compute_ratios}
 \title{Add CIF/FOB ratios to trade dataset}
 \usage{
-compute_ratios(d)
+compute_ratios(d, unit_values = FALSE)
 }
 \arguments{
 \item{d}{dataset to add CIF/FOB ratios to}
+
+\item{unit_values}{compute ratios after obtaining traded values in dollars
+per kilogram (defaults to FALSE)}
 }
 \description{
 Add CIF/FOB ratios to trade dataset

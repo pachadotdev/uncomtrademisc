@@ -1,31 +1,32 @@
 # Internal functions ----
 
-#' @importFrom dplyr collect
-filter_flow <- function(d, y, f, a = 6) {
-  d <- d %>%
-    filter(
-      !!sym("year") == y,
-      !!sym("trade_flow") == f,
-      !!sym("aggregate_level") == a
-    ) %>%
-    filter(
-      !(!!sym("reporter_iso") %in% c("wld", "0-unspecified")),
-      !(!!sym("partner_iso") %in% c("wld", "0-unspecified"))
-    ) %>%
-    select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"), !!sym("trade_value_usd")) %>%
-    collect()
-
-  # print(sort(unique(d$reporter_iso)))
-  # print(sort(unique(d$partner_iso)))
-
-  return(d)
-}
+# #' @importFrom dplyr filter collect
+# filter_flow <- function(d, y, f, a = 6) {
+#   d <- d %>%
+#     filter(
+#       !!sym("year") == y,
+#       !!sym("trade_flow") == f,
+#       !!sym("aggregate_level") == a
+#     ) %>%
+#     filter(
+#       !(!!sym("reporter_iso") %in% c("wld", "0-unspecified")),
+#       !(!!sym("partner_iso") %in% c("wld", "0-unspecified"))
+#     ) %>%
+#     select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"), !!sym("trade_value_usd"))
+#
+#   # print(sort(unique(d$reporter_iso)))
+#   # print(sort(unique(d$partner_iso)))
+#
+#   return(d)
+# }
 
 #' Add CIF/FOB ratios to trade dataset
 #' @param d dataset to add CIF/FOB ratios to
+#' @param unit_values compute ratios after obtaining traded values in dollars
+#'     per kilogram (defaults to FALSE)
 #' @export
-compute_ratios <- function(d) {
-  d %>%
+compute_ratios <- function(d, unit_values = FALSE) {
+  d <- d %>%
 
     mutate(
       cif_fob_ratio = !!sym("trade_value_usd_imp") / !!sym("trade_value_usd_exp")
@@ -44,6 +45,22 @@ compute_ratios <- function(d) {
         pmax(!!sym("trade_value_usd_imp"),
              !!sym("trade_value_usd_exp"), na.rm = T)
     )
+
+  if(isTRUE(unit_values)) {
+    d <- d %>%
+      mutate(
+        cif_fob_ratio_unit = (!!sym("trade_value_usd_imp") / !!sym("qty_imp")) /
+          (!!sym("trade_value_usd_exp") / !!sym("qty_exp"))
+      ) %>%
+      mutate(
+        cif_fob_weights_unit = pmin((!!sym("trade_value_usd_imp") / !!sym("qty_imp")),
+                                    (!!sym("trade_value_usd_exp") / !!sym("qty_exp")), na.rm = T) /
+          pmax((!!sym("trade_value_usd_imp") / !!sym("qty_imp")),
+               (!!sym("trade_value_usd_exp") / !!sym("qty_exp")), na.rm = T)
+      )
+  }
+
+  return(d)
 }
 
 #' @importFrom arrow open_dataset
@@ -65,8 +82,8 @@ open_dataset_partitioning <- function(path) {
                partitioning = c("aggregate_level", "trade_flow", "year", "reporter_iso"))
 }
 
-#' @importFrom dplyr summarise
-data_partitioned <- function(y, f, replace_unspecified_iso,
+#' @importFrom dplyr ungroup summarise
+data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
                              path = "hs-rev2002/parquet",
                              path2 = "hs-rev2012/parquet") {
   cat("reading data.")
@@ -97,8 +114,21 @@ data_partitioned <- function(y, f, replace_unspecified_iso,
       !!sym("year") == y,
       !!sym("trade_flow") == f,
       !!sym("aggregate_level") == 6
-    ) %>%
-    select(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("reporter_code"), !!sym("partner_code"), !!sym("commodity_code"), !!sym("trade_value_usd")) %>%
+    )
+
+  if (isTRUE(include_qty)) {
+    d <- d %>%
+      select(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("reporter_code"),
+             !!sym("partner_code"), !!sym("commodity_code"),
+             !!sym("qty_unit"), !!sym("qty"), !!sym("trade_value_usd"))
+  } else {
+    d <- d %>%
+      select(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("reporter_code"),
+           !!sym("partner_code"), !!sym("commodity_code"),
+           !!sym("trade_value_usd"))
+  }
+
+  d <- d %>%
     collect() %>%
     filter(!!sym("reporter_iso") != "wld", !!sym("partner_iso") != "wld")
 
@@ -123,11 +153,39 @@ data_partitioned <- function(y, f, replace_unspecified_iso,
       left_join(product_correlation_sbst, by = c("commodity_code" = "hs02"))
     cat(".")
 
+    if (isTRUE(include_qty)) {
+      d <- d %>%
+        select(!!sym("reporter_iso"), !!sym("partner_iso"),
+               commodity_code = !!sym("hs12"),
+               !!sym("qty_unit"), !!sym("qty"),
+               !!sym("trade_value_usd"))
+    } else {
+      d <- d %>%
+        select(!!sym("reporter_iso"), !!sym("partner_iso"),
+               commodity_code = !!sym("hs12"),
+               !!sym("trade_value_usd"))
+    }
+
     d <- d %>%
-      select(!!sym("reporter_iso"), !!sym("partner_iso"), commodity_code = !!sym("hs12"), !!sym("trade_value_usd")) %>%
       fix_missing_commodity() %>%
-      group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
-      summarise(trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T))
+      mutate(year = y)
+
+    if (isTRUE(include_qty)) {
+      d <- d %>%
+        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+                 !!sym("qty_unit"), !!sym("commodity_code")) %>%
+        summarise(
+          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T),
+          qty = sum(!!sym("qty"), na.rm = T)
+        )
+    } else {
+      d <- d %>%
+        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+                 !!sym("commodity_code")) %>%
+        summarise(
+          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T)
+        )
+    }
     cat(".\n")
 
     # missing_codes_count <- d %>%
@@ -139,23 +197,58 @@ data_partitioned <- function(y, f, replace_unspecified_iso,
     # stopifnot(missing_codes_count == 0)
   } else {
     cat("summarizing.")
+
+    if (isTRUE(include_qty)) {
+      d <- d %>%
+        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+               !!sym("commodity_code"),
+               !!sym("qty_unit"), !!sym("qty"), !!sym("trade_value_usd"))
+    } else {
+      d <- d %>%
+        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+               !!sym("commodity_code"),
+               !!sym("trade_value_usd"))
+    }
+
     d <- d %>%
-      select(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"), !!sym("trade_value_usd")) %>%
       fix_missing_commodity() %>%
-      group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
-      summarise(trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T))
+      mutate(year = y)
+
+    if (isTRUE(include_qty)) {
+      d <- d %>%
+        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+                 !!sym("qty_unit"), !!sym("commodity_code")) %>%
+        summarise(
+          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T),
+          qty = sum(!!sym("qty"), na.rm = T)
+        )
+    } else {
+      d <- d %>%
+        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+                 !!sym("commodity_code")) %>%
+        summarise(
+          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T)
+        )
+    }
     cat(".\n")
   }
 
-  return(d)
+  return(d %>% ungroup())
 }
 
 #' @importFrom dplyr full_join
-join_flows <- function(dimp, dexp) {
+join_flows <- function(dimp, dexp, include_qty) {
   d <- dimp %>%
     full_join(dexp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
-    rename(trade_value_usd_imp = !!sym("trade_value_usd.x"), trade_value_usd_exp = !!sym("trade_value_usd.y")) %>%
+    rename(trade_value_usd_imp = !!sym("trade_value_usd.x"), trade_value_usd_exp = !!sym("trade_value_usd.y"))
 
+  if (isTRUE(include_qty)) {
+    d <- d %>%
+      rename(qty_imp = !!sym("qty.x"), qty_unit_imp = !!sym("qty_unit.x"),
+             qty_exp = !!sym("qty.y"), qty_unit_exp = !!sym("qty_unit.y"))
+  }
+
+  d <- d %>%
     mutate(
       trade_value_usd_imp = ifelse(is.na(!!sym("trade_value_usd_imp")), 0, !!sym("trade_value_usd_imp")),
       trade_value_usd_exp = ifelse(is.na(!!sym("trade_value_usd_exp")), 0, !!sym("trade_value_usd_exp")),
@@ -278,14 +371,31 @@ reported_by <- function(d) {
 }
 
 #' @importFrom dplyr ends_with
-subtract_re_imp_exp <- function(d) {
-  d %>%
+subtract_re_imp_exp <- function(d, include_qty) {
+  d <- d %>%
     mutate_if(is.numeric, function(x) ifelse(is.na(x), 0, x)) %>%
-    mutate_if(is.numeric, function(x) ifelse(!is.finite(x), NA, x)) %>%
-    mutate(
-      trade_value_usd = pmax(!!sym("trade_value_usd.x") - !!sym("trade_value_usd.y"), 0, na.rm = T)
-    ) %>%
-    select(-ends_with(".x"), -ends_with(".y"))
+    mutate_if(is.numeric, function(x) ifelse(!is.finite(x), NA, x))
+
+  if (isTRUE(include_qty)) {
+    d <- d %>%
+      mutate(
+        trade_value_usd = pmax(!!sym("trade_value_usd.x") - !!sym("trade_value_usd.y"), 0, na.rm = T),
+        qty = pmax(!!sym("qty.x") - !!sym("qty.y"), 0, na.rm = T),
+        qty_unit = case_when(
+          !!sym("qty_unit.x") == !!sym("qty_unit.y") ~ !!sym("qty_unit.x"),
+          !!sym("qty_unit.x") != !!sym("qty_unit.y") ~ "mismatching units"
+        )
+      ) %>%
+      select(-ends_with(".x"), -ends_with(".y"))
+  } else {
+    d <- d %>%
+      mutate(
+        trade_value_usd = pmax(!!sym("trade_value_usd.x") - !!sym("trade_value_usd.y"), 0, na.rm = T)
+      ) %>%
+      select(-ends_with(".x"), -ends_with(".y"))
+  }
+
+  return(d)
 }
 
 #' Reshape UN COMTRADE bulk datasets to put these under tidy data format
@@ -296,43 +406,52 @@ subtract_re_imp_exp <- function(d) {
 #' year-origin-destination-product corresponds to a row. This function can also
 #' discount re-imports and re-export and fix missing ISO-3 codes.
 #'
-#' @importFrom dplyr left_join
+#' @importFrom dplyr left_join anti_join count summarise_if
 #'
 #' @param year which year to reshape
 #' @param subtract_re subtract re-imports (re-exports) from imports (exports),
-#' when the result is negative, it is converted to 0
+#' when the result is negative, it is converted to 0 (defaults to TRUE)
 #' @param replace_unspecified_iso convert all ocurrences of `0-unspecified` to
-#' `e-[0-9]` (i.e., `e-439` when corresponding)
+#' `e-[0-9]` such as `e-439` when corresponding (defaults to FALSE)
+#' @param include_qty include quantities and their units in the output\
+#' (defaults to FALSE)
 #' @param path the route to the folder with the parquet files for HS02 data
 #' @param path2 the route to the folder with the parquet files for HS12 data
 #'
 #' @export
-tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE,
-                       path = "hs-rev2002/parquet", path2 = "hs-rev2012/parquet") {
+tidy_flows <- function(year,
+                       subtract_re = TRUE,
+                       replace_unspecified_iso = TRUE,
+                       include_qty = FALSE,
+                       path = "../uncomtrade-datasets-arrow/hs-rev2002/parquet/",
+                       path2 = "../uncomtrade-datasets-arrow/hs-rev2012/parquet/") {
   messageline("Reading Imports data")
-  dimp <- data_partitioned(y = year, f = "import", replace_unspecified_iso, path, path2)
+  dimp <- data_partitioned(y = year, f = "import", replace_unspecified_iso, include_qty, path, path2)
   cat(".")
   if (isTRUE(subtract_re)) {
-    dreimp <- data_partitioned(y = year, f = "re-import", replace_unspecified_iso, path, path2)
+    dreimp <- data_partitioned(y = year, f = "re-import", replace_unspecified_iso, include_qty, path, path2)
     cat(".")
     dimp <- dimp %>%
-      left_join(dreimp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
-      subtract_re_imp_exp()
+      left_join(dreimp, by = c("reporter_iso", "partner_iso", "commodity_code"))
+
+    dimp <- dimp %>%
+      subtract_re_imp_exp(include_qty)
     cat(".")
     rm(dreimp)
     cat(".")
   }
 
   messageline("Exports")
-  dexp <- data_partitioned(y = year, f = "export", replace_unspecified_iso, path, path2)
+  dexp <- data_partitioned(y = year, f = "export", replace_unspecified_iso, include_qty, path, path2)
   cat(".")
-
   if (isTRUE(subtract_re)) {
-    dreexp <- data_partitioned(y = year, f = "re-export", replace_unspecified_iso, path, path2)
+    dreexp <- data_partitioned(y = year, f = "re-export", replace_unspecified_iso, include_qty, path, path2)
     cat(".")
     dexp <- dexp %>%
-      left_join(dreexp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
-      subtract_re_imp_exp()
+      left_join(dreexp, by = c("reporter_iso", "partner_iso", "commodity_code"))
+
+    dexp <- dexp %>%
+      subtract_re_imp_exp(include_qty)
     cat(".")
     rm(dreexp)
     cat(".")
@@ -343,7 +462,7 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE,
 
   messageline("Joining imports and exports")
   dimp <- dimp %>%
-    join_flows(dexp)
+    join_flows(dexp, include_qty)
   cat(".")
   rm(dexp)
   cat(".")
@@ -355,6 +474,50 @@ tidy_flows <- function(year, subtract_re = TRUE, replace_unspecified_iso = TRUE,
 
   stopifnot(missing_codes == 0)
   cat(".")
+
+  # dimp %>%
+  #   group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
+  #   count() %>%
+  #   filter(n > 1)
+  #
+  # dimp %>%
+  #   filter(reporter_iso == "and", partner_iso == "arg", commodity_code == "852341") %>%
+  #   View()
+
+  if (isTRUE(include_qty)) {
+    dimp <- dimp %>%
+      group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"),
+               !!sym("qty_unit_exp"), !!sym("qty_unit_imp")) %>%
+      summarise_if(is.numeric, function(x) sum(x, na.rm = TRUE)) %>%
+      ungroup()
+
+    # dimp %>%
+    #   filter(reporter_iso == "bhr", partner_iso == "qat", commodity_code == "950300") %>%
+    #   View()
+
+    dmis <- dimp %>%
+      group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
+      count() %>%
+      filter(!!sym("n") > 1) %>%
+      select(-!!sym("n"))
+
+    dimp_mis <- dimp %>%
+      inner_join(dmis) %>%
+      mutate(
+        qty_unit_exp = "mismatching units",
+        qty_unit_imp = "mismatching units"
+      ) %>%
+      group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"),
+               !!sym("qty_unit_exp"), !!sym("qty_unit_imp")) %>%
+      summarise_if(is.numeric, function(x) sum(x, na.rm = TRUE)) %>%
+      ungroup()
+
+    dimp <- dimp %>%
+      anti_join(dmis) %>%
+      bind_rows(dimp_mis)
+
+    rm(dimp_mis)
+  }
 
   unique_pairs <- dimp %>%
     select(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
@@ -437,6 +600,19 @@ filter_inter_quantile_range <- function(d) {
   d %>%
     filter(
       !!sym("cif_fob_ratio") > low & !!sym("cif_fob_ratio") < up
+    )
+}
+
+#' Filter units in kilograms
+#' @param d dataset with traded values
+#' @param ton how many kilograms is a ton (1000 = BACI, 1016.0469 = UK, 907.18474 = USA)
+filter_kg <- function(d, ton = 1000) {
+  d %>%
+    filter(
+      !!sym("qty_unit_exp") == "weight in kilograms" &
+        !!sym("qty_unit_imp") == "weight in kilograms",
+      !!sym("trade_value_usd_exp") > 10 & !!sym("trade_value_usd_imp") > 10,
+      !!sym("qty_exp") > 2 * ton & !!sym("qty_imp") > 2 * ton
     )
 }
 

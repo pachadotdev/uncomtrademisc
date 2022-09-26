@@ -8,18 +8,22 @@ tidy_flows(
   year,
   subtract_re = TRUE,
   replace_unspecified_iso = TRUE,
-  path = "hs-rev2002/parquet",
-  path2 = "hs-rev2012/parquet"
+  include_qty = FALSE,
+  path = "../uncomtrade-datasets-arrow/hs-rev2002/parquet/",
+  path2 = "../uncomtrade-datasets-arrow/hs-rev2012/parquet/"
 )
 }
 \arguments{
 \item{year}{which year to reshape}
 
 \item{subtract_re}{subtract re-imports (re-exports) from imports (exports),
-when the result is negative, it is converted to 0}
+when the result is negative, it is converted to 0 (defaults to TRUE)}
 
 \item{replace_unspecified_iso}{convert all ocurrences of `0-unspecified` to
-`e-[0-9]` (i.e., `e-439` when corresponding)}
+`e-[0-9]` such as `e-439` when corresponding (defaults to FALSE)}
+
+\item{include_qty}{include quantities and their units in the output\
+(defaults to FALSE)}
 
 \item{path}{the route to the folder with the parquet files for HS02 data}
 
