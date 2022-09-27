@@ -181,66 +181,63 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
     # stopifnot(missing_codes_count == 0)
   }
 
-    cat("summarizing...\n")
+  cat("summarizing...\n")
 
-    if (isTRUE(include_qty)) {
-      d <- d %>%
-        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-               !!sym("commodity_code"),
-               !!sym("qty_unit"), !!sym("qty"), !!sym("trade_value_usd"))
-    } else {
-      d <- d %>%
-        select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-               !!sym("commodity_code"),
-               !!sym("trade_value_usd"))
-    }
+  if (isFALSE(include_qty)) {
+    d <- d %>%
+      select(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+             !!sym("commodity_code"),
+             !!sym("trade_value_usd"))
+  }
+
+  d <- d %>%
+    fix_missing_commodity()
+
+  if (isTRUE(include_qty)) {
+    d <- d %>%
+      group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+               !!sym("qty_unit"), !!sym("commodity_code")) %>%
+      summarise(
+        trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T),
+        qty = sum(!!sym("qty"), na.rm = T)
+      ) %>%
+      ungroup()
+
+    dmis <- d %>%
+      group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
+      count() %>%
+      filter(!!sym("n") > 1) %>%
+      select(-!!sym("n"))
+
+    dmis <- d %>%
+      inner_join(dmis) %>%
+      mutate(
+        qty_unit = "mismatching units",
+        qty = NA
+      ) %>%
+      select(-!!sym("year")) %>%
+      group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"),
+               !!sym("qty_unit")) %>%
+      summarise_if(is.numeric, function(x) sum(x, na.rm = TRUE)) %>%
+      ungroup()
 
     d <- d %>%
-      fix_missing_commodity() %>%
-      mutate(year = y)
+      anti_join(
+        dmis %>%
+          select(-!!sym("qty_unit"), -!!sym("trade_value_usd"))
+      ) %>%
+      bind_rows(dmis)
 
-    if (isTRUE(include_qty)) {
-      d <- d %>%
-        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-                 !!sym("qty_unit"), !!sym("commodity_code")) %>%
-        summarise(
-          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T),
-          qty = sum(!!sym("qty"), na.rm = T)
-        ) %>%
-        ungroup()
+    rm(dmis)
+  } else {
+    d <- d %>%
+      group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
+               !!sym("commodity_code")) %>%
+      summarise_if(is.numeric, function(x) sum(x, na.rm = TRUE)) %>%
+      ungroup()
+  }
 
-      dmis <- d %>%
-        group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
-        count() %>%
-        filter(!!sym("n") > 1) %>%
-        select(-!!sym("n"))
-
-      d_mis <- d %>%
-        inner_join(dmis) %>%
-        mutate(
-          qty_unit = "mismatching units",
-          qty = NA
-        ) %>%
-        group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"),
-                 !!sym("qty_unit")) %>%
-        summarise_if(is.numeric, function(x) sum(x, na.rm = TRUE)) %>%
-        ungroup()
-
-      d <- d %>%
-        anti_join(d) %>%
-        bind_rows(d_mis)
-
-      rm(d_mis)
-    } else {
-      d <- d %>%
-        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-                 !!sym("commodity_code")) %>%
-        summarise(
-          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T)
-        )
-    }
-
-  return(d %>% ungroup())
+  return(d)
 }
 
 #' @importFrom dplyr full_join

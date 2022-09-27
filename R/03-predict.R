@@ -125,7 +125,9 @@ conciliate_flows <- function(y,
   # we do a full join, so all trade flows reported either by the importer or the
   # exporter are present in our intermediary datasets
   cat("Joining flows...\n")
-  dexp <- join_flows(dexp, dimp, include_qty = include_qty)
+  dexp <- join_flows(dimp = dimp, dexp = dexp, include_qty = include_qty)
+  dexp <- dexp %>%
+    mutate(year = y)
   rm(dimp); gc()
 
   # work on obs. with kilograms ----
