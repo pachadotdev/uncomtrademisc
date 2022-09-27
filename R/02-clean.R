@@ -387,7 +387,9 @@ subtract_re_imp_exp <- function(d, include_qty) {
         qty = pmax(!!sym("qty.x") - !!sym("qty.y"), 0, na.rm = T),
         qty_unit = case_when(
           !!sym("qty_unit.x") == !!sym("qty_unit.y") ~ !!sym("qty_unit.x"),
-          !!sym("qty_unit.x") != !!sym("qty_unit.y") ~ "mismatching units"
+          (!!sym("qty_unit.x") != !!sym("qty_unit.y")) &
+            (!!sym("trade_value_usd.y") > 0) ~ "mismatching units",
+          TRUE ~ !!sym("qty_unit.x")
         )
       ) %>%
       select(-ends_with(".x"), -ends_with(".y"))

@@ -59,7 +59,7 @@ fobization_system_val <- function(d) {
 #' @importFrom dplyr starts_with
 #' @export
 conciliate_flows <- function(y,
-                             subtract_re = TRUE,
+                             subtract_re = FALSE,
                              filter_kg = FALSE,
                              unit_values = FALSE,
                              include_qty = FALSE,
@@ -72,6 +72,8 @@ conciliate_flows <- function(y,
                            replace_unspecified_iso = replace_unspecified_iso,
                            include_qty = include_qty)
 
+  # dexp %>% group_by(qty_unit) %>% count()
+
   # dexp %>%
   #   group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
   #   count() %>%
@@ -82,6 +84,8 @@ conciliate_flows <- function(y,
                            replace_unspecified_iso = replace_unspecified_iso,
                            include_qty = include_qty) %>%
     select(-!!sym("year"))
+
+  # dimp %>% group_by(qty_unit) %>% count()
 
   # dimp %>%
   #   group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
@@ -96,10 +100,13 @@ conciliate_flows <- function(y,
                                path = path, path2 = path2) %>%
       select(-!!sym("year"))
 
+    # dreexp %>% group_by(qty_unit) %>% count()
+
     cat(".")
     dexp <- dexp %>%
       left_join(dreexp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
       subtract_re_imp_exp(include_qty = include_qty)
+    # dexp %>% group_by(qty_unit) %>% count()
     cat(".")
     rm(dreexp)
     cat(".\n")
@@ -170,6 +177,10 @@ conciliate_flows <- function(y,
   # above 10$ and quantity above 2 tonnes.
 
   n <- nrow(dexp)
+
+  # dexp %>%
+  #   group_by(!!sym("qty_unit_exp")) %>%
+  #   count()
 
   if (isTRUE(filter_kg)) {
     dexp <- filter_kg(dexp)
