@@ -27,5 +27,3 @@ Imports:
 SystemRequirements: parallel: parallel (deb), 7z: p7zip-full (deb)
 Depends: 
     R (>= 2.10)
-Suggests: 
-    tradestatistics

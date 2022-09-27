@@ -170,22 +170,6 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
       fix_missing_commodity() %>%
       mutate(year = y)
 
-    if (isTRUE(include_qty)) {
-      d <- d %>%
-        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-                 !!sym("qty_unit"), !!sym("commodity_code")) %>%
-        summarise(
-          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T),
-          qty = sum(!!sym("qty"), na.rm = T)
-        )
-    } else {
-      d <- d %>%
-        group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
-                 !!sym("commodity_code")) %>%
-        summarise(
-          trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T)
-        )
-    }
     cat(".\n")
 
     # missing_codes_count <- d %>%
@@ -195,8 +179,9 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
     #   pull()
     #
     # stopifnot(missing_codes_count == 0)
-  } else {
-    cat("summarizing.")
+  }
+
+    cat("summarizing...\n")
 
     if (isTRUE(include_qty)) {
       d <- d %>%
@@ -221,7 +206,31 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
         summarise(
           trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T),
           qty = sum(!!sym("qty"), na.rm = T)
-        )
+        ) %>%
+        ungroup()
+
+      dmis <- d %>%
+        group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
+        count() %>%
+        filter(!!sym("n") > 1) %>%
+        select(-!!sym("n"))
+
+      d_mis <- d %>%
+        inner_join(dmis) %>%
+        mutate(
+          qty_unit = "mismatching units",
+          qty = NA
+        ) %>%
+        group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"),
+                 !!sym("qty_unit")) %>%
+        summarise_if(is.numeric, function(x) sum(x, na.rm = TRUE)) %>%
+        ungroup()
+
+      d <- d %>%
+        anti_join(d) %>%
+        bind_rows(d_mis)
+
+      rm(d_mis)
     } else {
       d <- d %>%
         group_by(!!sym("year"), !!sym("reporter_iso"), !!sym("partner_iso"),
@@ -230,8 +239,6 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
           trade_value_usd = sum(!!sym("trade_value_usd"), na.rm = T)
         )
     }
-    cat(".\n")
-  }
 
   return(d %>% ungroup())
 }
@@ -491,10 +498,6 @@ tidy_flows <- function(year,
       summarise_if(is.numeric, function(x) sum(x, na.rm = TRUE)) %>%
       ungroup()
 
-    # dimp %>%
-    #   filter(reporter_iso == "bhr", partner_iso == "qat", commodity_code == "950300") %>%
-    #   View()
-
     dmis <- dimp %>%
       group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code")) %>%
       count() %>%
@@ -505,7 +508,9 @@ tidy_flows <- function(year,
       inner_join(dmis) %>%
       mutate(
         qty_unit_exp = "mismatching units",
-        qty_unit_imp = "mismatching units"
+        qty_unit_imp = "mismatching units",
+        qty_exp = NA,
+        qty_imp = NA
       ) %>%
       group_by(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"),
                !!sym("qty_unit_exp"), !!sym("qty_unit_imp")) %>%
@@ -549,14 +554,12 @@ tidy_flows <- function(year,
 #' @param path where to find distances dataset
 #' @export
 add_gravity_cols <- function(d, path = "attributes") {
-  distances <- readRDS(paste0(path, "/distances.rds"))
-
   d <- d %>%
     mutate(
       country1 = pmin(!!sym("reporter_iso"), !!sym("partner_iso")),
       country2 = pmax(!!sym("reporter_iso"), !!sym("partner_iso"))
     ) %>%
-    inner_join(distances) %>%
+    inner_join(uncomtrademisc::ots_distances) %>%
     select(-c("country1", "country2"))
 
   return(d)
