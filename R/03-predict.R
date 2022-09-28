@@ -247,24 +247,28 @@ conciliate_flows <- function(y,
 
   stopifnot(unique_pairs == nrow(dexp))
 
+  dexp <- dexp %>%
+    add_gravity_cols() %>%
+    # add_rta_col(y) %>%
+    mutate(
+      contig = as.integer(!!sym("contig")),
+      comlang_off = as.integer(!!sym("comlang_off")),
+      colony = as.integer(!!sym("colony"))
+    ) %>%
+    rename(
+      exporter_iso = !!sym("reporter_iso"),
+      importer_iso = !!sym("partner_iso")
+    )
+
   p <- nrow(dexp) / n
   message(paste("Proportion of filtered rows / total rows", p))
 
   return(list(
     year = y,
+    initial_rows = n,
+    final_rows = nrow(dexp),
     proportion = p,
-    data = dexp %>%
-      add_gravity_cols() %>%
-      # add_rta_col(y) %>%
-      mutate(
-        contig = as.integer(!!sym("contig")),
-        comlang_off = as.integer(!!sym("comlang_off")),
-        colony = as.integer(!!sym("colony"))
-      ) %>%
-      rename(
-        exporter_iso = !!sym("reporter_iso"),
-        importer_iso = !!sym("partner_iso")
-      )
+    data = dexp
   ))
 }
 

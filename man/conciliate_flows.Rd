@@ -6,13 +6,13 @@
 \usage{
 conciliate_flows(
   y,
-  subtract_re = TRUE,
+  subtract_re = FALSE,
   filter_kg = FALSE,
   unit_values = FALSE,
   include_qty = FALSE,
   replace_unspecified_iso = TRUE,
-  path = "hs-rev2002/parquet",
-  path2 = "hs-rev2012/parquet"
+  path = "../uncomtrade-datasets-arrow/hs-rev2002/parquet/",
+  path2 = "../uncomtrade-datasets-arrow/hs-rev2012/parquet/"
 )
 }
 \arguments{

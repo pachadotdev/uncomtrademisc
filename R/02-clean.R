@@ -57,6 +57,10 @@ compute_ratios <- function(d, unit_values = FALSE) {
                                     (!!sym("trade_value_usd_exp") / !!sym("qty_exp")), na.rm = T) /
           pmax((!!sym("trade_value_usd_imp") / !!sym("qty_imp")),
                (!!sym("trade_value_usd_exp") / !!sym("qty_exp")), na.rm = T)
+      ) %>%
+      mutate(
+        cif_fob_ratio_unit_ok = ifelse(
+          !!sym("cif_fob_ratio_unit") >= 1 & is.finite(!!sym("cif_fob_ratio_unit")), 1L, 0L)
       )
   }
 
