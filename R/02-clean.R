@@ -583,6 +583,8 @@ add_gravity_cols <- function(d, y = NULL, path = "attributes") {
     collect() %>%
     select(-c("year", "iso3num_o", "iso3num_d"))
 
+  duckdb::dbDisconnect(con, shutdown=TRUE)
+
   d <- d %>%
     inner_join(
       gravity,
