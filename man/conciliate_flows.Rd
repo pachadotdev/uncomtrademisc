@@ -25,6 +25,8 @@ conciliate_flows(
 
 \item{unit_values}{obtain traded unit values (i.e. kilograms per dollar)}
 
+\item{include_qty}{report units in the final dataset (defaults to `FALSE`)}
+
 \item{replace_unspecified_iso}{convert all ocurrences of `0-unspecified` to
 `e-[0-9]` (i.e., `e-439` when corresponding)}
 

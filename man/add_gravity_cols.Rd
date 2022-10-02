@@ -4,10 +4,12 @@
 \alias{add_gravity_cols}
 \title{Add bilateral distances to trade dataset}
 \usage{
-add_gravity_cols(d, path = "attributes")
+add_gravity_cols(d, y = NULL, path = "attributes")
 }
 \arguments{
 \item{d}{dataset to add distances to}
+
+\item{y}{year to subset gravity variables for the join operation}
 
 \item{path}{where to find distances dataset}
 }

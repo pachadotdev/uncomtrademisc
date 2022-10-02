@@ -169,21 +169,34 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
                commodity_code = !!sym("hs12"),
                !!sym("trade_value_usd"))
     }
-
-    d <- d %>%
-      fix_missing_commodity() %>%
-      mutate(year = y)
-
-    cat(".\n")
-
-    # missing_codes_count <- d %>%
-    #   ungroup() %>%
-    #   filter(is.na(commodity_code)) %>%
-    #   count() %>%
-    #   pull()
-    #
-    # stopifnot(missing_codes_count == 0)
   }
+
+  if (isTRUE(include_qty)) {
+    d <- d %>%
+      select(!!sym("reporter_iso"), !!sym("partner_iso"),
+             !!sym("commodity_code"),
+             !!sym("qty_unit"), !!sym("qty"),
+             !!sym("trade_value_usd"))
+  } else {
+    d <- d %>%
+      select(!!sym("reporter_iso"), !!sym("partner_iso"),
+             !!sym("commodity_code"),
+             !!sym("trade_value_usd"))
+  }
+
+  d <- d %>%
+    fix_missing_commodity() %>%
+    mutate(year = y)
+
+  cat(".\n")
+
+  # missing_codes_count <- d %>%
+  #   ungroup() %>%
+  #   filter(is.na(commodity_code)) %>%
+  #   count() %>%
+  #   pull()
+  #
+  # stopifnot(missing_codes_count == 0)
 
   cat("summarizing...\n")
 
@@ -357,7 +370,7 @@ fix_missing_commodity <- function(d) {
 add_hs_section <- function(d) {
   d %>%
     left_join(
-      uncomtrademisc::ots_commodities %>%
+      tradestatistics::ots_commodities %>%
         select(!!sym("commodity_code"), !!sym("section_code")),
       by = "commodity_code"
     ) %>%
@@ -554,41 +567,27 @@ tidy_flows <- function(year,
 
 #' Add bilateral distances to trade dataset
 #' @param d dataset to add distances to
+#' @param y year to subset gravity variables for the join operation
 #' @param path where to find distances dataset
+#' @importFrom rlang is_installed sym
+#' @importFrom dplyr tbl collect filter inner_join select
+#' @importFrom utils data
 #' @export
-add_gravity_cols <- function(d, path = "attributes") {
-  d <- d %>%
-    mutate(
-      country1 = pmin(!!sym("reporter_iso"), !!sym("partner_iso")),
-      country2 = pmax(!!sym("reporter_iso"), !!sym("partner_iso"))
-    ) %>%
-    inner_join(uncomtrademisc::ots_distances) %>%
-    select(-c("country1", "country2"))
+add_gravity_cols <- function(d, y = NULL, path = "attributes") {
+  stopifnot(isTRUE(is_installed("cepiigravity")))
 
-  return(d)
-}
+  con <- cepiigravity::gravity_connect()
 
-#' Add RTAs to trade dataset
-#' @param d dataset to add RTAs to
-#' @param path where to find RTAs dataset
-#' @export
-add_rta_col <- function(d, path = "mfn-rtas") {
-  rtas <- readRDS(paste0(path, "/rtas.rds"))
+  gravity <- tbl(con, "gravity") %>%
+    filter(!!sym("year") == y) %>%
+    collect() %>%
+    select(-c("year", "iso3num_o", "iso3num_d"))
 
   d <- d %>%
-    mutate(
-      country1 = pmin(!!sym("reporter_iso"), !!sym("partner_iso")),
-      country2 = pmax(!!sym("reporter_iso"), !!sym("partner_iso"))
-    ) %>%
-    left_join(
-      rtas %>%
-        select(c("year", "country1", "country2", "rta")),
-      by = c("year", "country1", "country2")
-    ) %>%
-    mutate(
-      rta = as.integer(ifelse(is.na(!!sym("rta")), 0, !!sym("rta")))
-    ) %>%
-    select(-c("country1", "country2"))
+    inner_join(
+      gravity,
+      by = c("reporter_iso" = "iso3_d", "partner_iso" = "iso3_o")
+    )
 
   return(d)
 }

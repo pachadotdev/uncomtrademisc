@@ -51,6 +51,7 @@ fobization_system_val <- function(d) {
 #' @param filter_kg remove observations not expressed in kilograms
 #'     (i.e., not available, liters, etc)
 #' @param unit_values obtain traded unit values (i.e. kilograms per dollar)
+#' @param include_qty report units in the final dataset (defaults to `FALSE`)
 #' @param replace_unspecified_iso convert all ocurrences of `0-unspecified` to
 #' `e-[0-9]` (i.e., `e-439` when corresponding)
 #' @param path the route to the folder with the parquet files for HS02 data
@@ -248,16 +249,10 @@ conciliate_flows <- function(y,
   stopifnot(unique_pairs == nrow(dexp))
 
   dexp <- dexp %>%
-    add_gravity_cols() %>%
-    # add_rta_col(y) %>%
-    mutate(
-      contig = as.integer(!!sym("contig")),
-      comlang_off = as.integer(!!sym("comlang_off")),
-      colony = as.integer(!!sym("colony"))
-    ) %>%
+    add_gravity_cols(y) %>%
     rename(
-      exporter_iso = !!sym("reporter_iso"),
-      importer_iso = !!sym("partner_iso")
+      exporter_iso = !!sym("partner_iso"),
+      importer_iso = !!sym("reporter_iso")
     )
 
   p <- nrow(dexp) / n
