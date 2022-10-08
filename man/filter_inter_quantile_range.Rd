@@ -4,10 +4,12 @@
 \alias{filter_inter_quantile_range}
 \title{Filter trade dataset based on IQR}
 \usage{
-filter_inter_quantile_range(d)
+filter_inter_quantile_range(d, column = "cif_fob_ratio")
 }
 \arguments{
 \item{d}{dataset to filter}
+
+\item{column}{column to filter (cif_fob_ratio or cif_fob_ratio_unit)}
 }
 \description{
 Filter trade dataset based on IQR

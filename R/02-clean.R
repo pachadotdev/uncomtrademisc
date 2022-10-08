@@ -88,6 +88,7 @@ open_dataset_partitioning <- function(path) {
 
 #' @importFrom dplyr ungroup summarise
 data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
+                             aggregation_digits = 6,
                              path = "hs-rev2002/parquet",
                              path2 = "hs-rev2012/parquet") {
   cat("reading data.")
@@ -117,7 +118,7 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
     filter(
       !!sym("year") == y,
       !!sym("trade_flow") == f,
-      !!sym("aggregate_level") == 6
+      !!sym("aggregate_level") == aggregation_digits
     )
 
   if (isTRUE(include_qty)) {
@@ -150,6 +151,13 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
       select(!!sym("hs02"), !!sym("hs12")) %>%
       arrange(!!sym("hs12")) %>%
       distinct(!!sym("hs02"), .keep_all = T)
+
+    if (aggregation_digits == 4) {
+      product_correlation_sbst <- product_correlation_sbst %>%
+        mutate_if(is.character, function(x) { substr(x, 1, 4) }) %>%
+        arrange(!!sym("hs12")) %>%
+        distinct(!!sym("hs02"), .keep_all = T)
+    }
 
     cat(".")
 
@@ -208,7 +216,7 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
   }
 
   d <- d %>%
-    fix_missing_commodity()
+    fix_missing_commodity(aggregation_digits)
 
   if (isTRUE(include_qty)) {
     d <- d %>%
@@ -258,10 +266,18 @@ data_partitioned <- function(y, f, replace_unspecified_iso, include_qty,
 }
 
 #' @importFrom dplyr full_join
-join_flows <- function(dimp, dexp, include_qty) {
-  d <- dimp %>%
-    full_join(dexp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
-    rename(trade_value_usd_imp = !!sym("trade_value_usd.x"), trade_value_usd_exp = !!sym("trade_value_usd.y"))
+join_flows <- function(dimp, dexp, include_qty, for_imputation = F) {
+  if (isFALSE(for_imputation)) {
+    d <- dimp %>%
+      full_join(dexp, by = c("reporter_iso", "partner_iso", "commodity_code")) %>%
+      rename(trade_value_usd_imp = !!sym("trade_value_usd.x"), trade_value_usd_exp = !!sym("trade_value_usd.y"))
+  }
+
+  if (isTRUE(for_imputation)) {
+    d <- dimp %>%
+      full_join(dexp, by = c("reporter_iso" = "partner_iso", "partner_iso" = "reporter_iso", "commodity_code")) %>%
+      rename(trade_value_usd_imp = !!sym("trade_value_usd.x"), trade_value_usd_exp = !!sym("trade_value_usd.y"))
+  }
 
   if (isTRUE(include_qty)) {
     d <- d %>%
@@ -356,11 +372,13 @@ fix_missing_iso <- function(d) {
     )
 }
 
-fix_missing_commodity <- function(d) {
+fix_missing_commodity <- function(d, aggregation_digits = 6) {
+  c99 <- ifelse(aggregation_digits == 4, "9999", "999999")
+
   d %>%
     mutate(
       commodity_code = case_when(
-        is.na(!!sym("commodity_code")) ~ "999999",
+        is.na(!!sym("commodity_code")) ~ c99,
         TRUE ~ !!sym("commodity_code")
       )
     )
@@ -596,18 +614,33 @@ add_gravity_cols <- function(d, y = NULL, path = "attributes") {
 
 #' Filter trade dataset based on IQR
 #' @param d dataset to filter
+#' @param column column to filter (cif_fob_ratio or cif_fob_ratio_unit)
 #' @importFrom stats IQR quantile
 #' @export
-filter_inter_quantile_range <- function(d) {
-  Q   <- quantile(d$cif_fob_ratio, probs = c(.25, .75), na.rm = FALSE)
-  iqr <- IQR(d$cif_fob_ratio)
-  up  <- Q[2] + 1.5 * iqr # Upper Range
-  low <- Q[1] - 1.5 * iqr # Lower Range
+filter_inter_quantile_range <- function(d, column = "cif_fob_ratio") {
+  if (column == "cif_fob_ratio") {
+    Q   <- quantile(d$cif_fob_ratio, probs = c(.25, .75), na.rm = FALSE)
+    iqr <- IQR(d$cif_fob_ratio)
+    up  <- Q[2] + 1.5 * iqr # Upper Range
+    low <- Q[1] - 1.5 * iqr # Lower Range
 
-  d %>%
-    filter(
-      !!sym("cif_fob_ratio") > low & !!sym("cif_fob_ratio") < up
-    )
+    d <- d %>%
+      filter(
+        !!sym("cif_fob_ratio") > low & !!sym("cif_fob_ratio") < up
+      )
+  } else {
+    Q   <- quantile(d$cif_fob_ratio_unit, probs = c(.25, .75), na.rm = FALSE)
+    iqr <- IQR(d$cif_fob_ratio_unit)
+    up  <- Q[2] + 1.5 * iqr # Upper Range
+    low <- Q[1] - 1.5 * iqr # Lower Range
+
+    d <- d %>%
+      filter(
+        !!sym("cif_fob_ratio_unit") > low & !!sym("cif_fob_ratio_unit") < up
+      )
+  }
+
+  return(d)
 }
 
 #' Filter units in kilograms

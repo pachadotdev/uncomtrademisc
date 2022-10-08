@@ -10,6 +10,7 @@ conciliate_flows(
   filter_kg = FALSE,
   unit_values = FALSE,
   include_qty = FALSE,
+  aggregation_digits = 4,
   replace_unspecified_iso = TRUE,
   path = "../uncomtrade-datasets-arrow/hs-rev2002/parquet/",
   path2 = "../uncomtrade-datasets-arrow/hs-rev2012/parquet/"
@@ -26,6 +27,8 @@ conciliate_flows(
 \item{unit_values}{obtain traded unit values (i.e. kilograms per dollar)}
 
 \item{include_qty}{report units in the final dataset (defaults to `FALSE`)}
+
+\item{aggregation_digits}{length of HS codes to use in the data (defaults to `4`)}
 
 \item{replace_unspecified_iso}{convert all ocurrences of `0-unspecified` to
 `e-[0-9]` (i.e., `e-439` when corresponding)}

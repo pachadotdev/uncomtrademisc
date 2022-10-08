@@ -52,18 +52,20 @@ fobization_system_val <- function(d) {
 #'     (i.e., not available, liters, etc)
 #' @param unit_values obtain traded unit values (i.e. kilograms per dollar)
 #' @param include_qty report units in the final dataset (defaults to `FALSE`)
+#' @param aggregation_digits length of HS codes to use in the data (defaults to `4`)
 #' @param replace_unspecified_iso convert all ocurrences of `0-unspecified` to
 #' `e-[0-9]` (i.e., `e-439` when corresponding)
 #' @param path the route to the folder with the parquet files for HS02 data
 #' @param path2 the route to the folder with the parquet files for HS12 data
 #' @importFrom forcats as_factor
-#' @importFrom dplyr starts_with
+#' @importFrom dplyr starts_with mutate_if
 #' @export
 conciliate_flows <- function(y,
                              subtract_re = FALSE,
                              filter_kg = FALSE,
                              unit_values = FALSE,
                              include_qty = FALSE,
+                             aggregation_digits = 4,
                              replace_unspecified_iso = TRUE,
                              path = "../uncomtrade-datasets-arrow/hs-rev2002/parquet/",
                              path2 = "../uncomtrade-datasets-arrow/hs-rev2012/parquet/") {
@@ -71,7 +73,7 @@ conciliate_flows <- function(y,
   cat("Exports...\n")
   dexp <- data_partitioned(y, f = "export", path = path, path2 = path2,
                            replace_unspecified_iso = replace_unspecified_iso,
-                           include_qty = include_qty)
+                           include_qty = include_qty, aggregation_digits = aggregation_digits)
 
   # dexp %>% group_by(qty_unit) %>% count()
 
@@ -83,7 +85,7 @@ conciliate_flows <- function(y,
   cat("Imports...\n")
   dimp <- data_partitioned(y, f = "import", path = path, path2 = path2,
                            replace_unspecified_iso = replace_unspecified_iso,
-                           include_qty = include_qty) %>%
+                           include_qty = include_qty, aggregation_digits = aggregation_digits) %>%
     select(-!!sym("year"))
 
   # dimp %>% group_by(qty_unit) %>% count()
@@ -97,7 +99,7 @@ conciliate_flows <- function(y,
     cat("Re-Exports...\n")
     dreexp <- data_partitioned(y, f = "re-export",
                                replace_unspecified_iso = replace_unspecified_iso,
-                               include_qty = include_qty,
+                               include_qty = include_qty, aggregation_digits = aggregation_digits,
                                path = path, path2 = path2) %>%
       select(-!!sym("year"))
 
@@ -115,7 +117,7 @@ conciliate_flows <- function(y,
     cat("Re-Imports...\n")
     dreimp <- data_partitioned(y, f = "re-import",
                                replace_unspecified_iso = replace_unspecified_iso,
-                               include_qty = include_qty,
+                               include_qty = include_qty, aggregation_digits = aggregation_digits,
                                path = path, path2 = path2) %>%
       select(-!!sym("year"))
 
@@ -133,7 +135,7 @@ conciliate_flows <- function(y,
   # we do a full join, so all trade flows reported either by the importer or the
   # exporter are present in our intermediary datasets
   cat("Joining flows...\n")
-  dexp <- join_flows(dimp = dimp, dexp = dexp, include_qty = include_qty)
+  dexp <- join_flows(dimp = dimp, dexp = dexp, include_qty = include_qty, for_imputation = T)
   dexp <- dexp %>%
     mutate(year = y)
   rm(dimp); gc()
@@ -187,40 +189,6 @@ conciliate_flows <- function(y,
     dexp <- filter_kg(dexp)
   }
 
-  # convert HS02 to HS12 ----
-
-  if (y < 2012) {
-    cat("Converting HS codes.")
-    hs02_to_hs12 <- uncomtrademisc::product_correlation %>%
-      select(!!sym("hs02"), !!sym("hs12")) %>%
-      arrange(!!sym("hs12")) %>%
-      distinct(!!sym("hs02"), .keep_all = T)
-
-    cat(".")
-    dexp <- dexp %>%
-      left_join(hs02_to_hs12, by = c("commodity_code" = "hs02")) %>%
-      select(-!!sym("commodity_code")) %>%
-      rename(commodity_code = !!sym("hs12")) %>%
-      mutate(
-        commodity_code = case_when(
-          is.na(!!sym("commodity_code")) ~ "999999",
-          TRUE ~ !!sym("commodity_code")
-        )
-      )
-
-    cat(".")
-    dexp <- dexp %>%
-      group_by(!!sym("year"), !!sym("reporter_iso"),
-               !!sym("partner_iso"), !!sym("commodity_code")) %>%
-      summarise(
-        trade_value_usd_exp = sum(!!sym("trade_value_usd_exp"), na.rm = T),
-        trade_value_usd_imp = sum(!!sym("trade_value_usd_imp"), na.rm = T),
-        qty_exp = sum(!!sym("qty_exp"), na.rm = T),
-        qty_imp = sum(!!sym("qty_imp"), na.rm = T)
-      ) %>%
-      ungroup()
-  }
-
   # obtain unit values ----
 
   # 2) Compute unit values as reported by the exporter
@@ -231,7 +199,7 @@ conciliate_flows <- function(y,
     compute_ratios(unit_values = unit_values) %>%
     select(!!sym("year"), !!sym("reporter_iso"),
            !!sym("partner_iso"), !!sym("commodity_code"),
-           starts_with("uv_"), starts_with("cif_fob_")) %>%
+           starts_with("trade_value_"), starts_with("cif_fob_")) %>%
     mutate(year = as_factor(!!sym("year")))
 
   unique_pairs <- dexp %>%
