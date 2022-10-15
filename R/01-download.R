@@ -67,7 +67,7 @@ file_remove <- function(x) {
 convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_zip) {
   messageline(yrs[t])
 
-  try(unlink(grep(paste0("year=",yrs[t]), raw_subdirs_parquet$file, value = T), recursive = T))
+  try(unlink(grep(paste0("/",yrs[t],"/"), raw_subdirs_parquet$file, value = T), recursive = T))
 
   zip <- grep(paste0(yrs[t], "_freq-A"), raw_zip, value = T)
 
@@ -154,7 +154,7 @@ convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_z
 #' COMPLETE DESC...
 #'
 #' @importFrom jsonlite fromJSON
-#' @importFrom dplyr select arrange pull rename tibble bind_rows distinct
+#' @importFrom dplyr select arrange pull rename tibble bind_rows distinct group_by summarise
 #' @importFrom readr read_csv write_csv
 #' @importFrom stringr str_replace_all
 #' @importFrom utils menu
@@ -165,25 +165,32 @@ convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_z
 #'     eases posterior analysis and modeling.
 #'
 #' @export
-data_downloading <- function(arrow = T) {
-  check_token()
+data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old_files = NULL,
+                             subset_years = NULL) {
+  if (is.null(token)) { check_token() }
 
   # download ----
-  dataset <- menu(
-    c("HS rev 1992", "HS rev 1996", "HS rev 2002", "HS rev 2007", "HS rev 2012",
-      "SITC rev 1", "SITC rev 2", "SITC rev 3", "SITC rev 4"),
-    title = "Select dataset:",
-    graphics = F
-  )
+  if (is.null(dataset)) {
+    dataset <- menu(
+      c("HS rev 1992", "HS rev 1996", "HS rev 2002", "HS rev 2007", "HS rev 2012",
+        "SITC rev 1", "SITC rev 2", "SITC rev 3", "SITC rev 4"),
+      title = "Select dataset:",
+      graphics = F
+    )
+  }
 
-  remove_old_files <- menu(
-    c("yes", "no"),
-    title = "Remove old files (y/n):",
-    graphics = F
-  )
+  if (is.null(remove_old_files)) {
+    remove_old_files <- menu(
+      c("yes", "no"),
+      title = "Remove old files (y/n):",
+      graphics = F
+    )
+  }
 
-  subset_years <- readline(prompt = "Years to download (i.e. `2000:2020`, hit enter to download all available data): ")
-  subset_years <- as.numeric(unlist(strsplit(subset_years, ":")))
+  if (is.null(subset_years)) {
+    subset_years <- readline(prompt = "Years to download (i.e. `2000:2020`, hit enter to download all available data): ")
+    subset_years <- as.numeric(unlist(strsplit(subset_years, ":")))
+  }
 
   classification <- ifelse(dataset < 6, "hs", "sitc")
 
@@ -321,7 +328,16 @@ data_downloading <- function(arrow = T) {
 
   years_to_update <- files_to_update$year
 
-  download_files(download_links)
+  if (remove_old_files == 1L) {
+    files_to_remove <- list.files(raw_dir_zip,
+                                  pattern = paste(paste0("ps-",years_to_update), collapse = "|"),
+                                  full.names = T)
+    lapply(files_to_remove, file_remove)
+  }
+
+  if (length(years_to_update) > 0) {
+    download_files(download_links)
+  }
 
   download_links <- download_links %>%
     select(!!sym("year"), !!sym("url"), !!sym("new_file"), !!sym("local_file_date")) %>%
@@ -346,7 +362,7 @@ data_downloading <- function(arrow = T) {
   if (classification == "sitc") {
     aggregations <- 0:5
   } else {
-    aggregations <- 0:6
+    aggregations <- c(0,2,4,6)
   }
 
   # re-create any missing/updated arrow dataset
@@ -359,12 +375,14 @@ data_downloading <- function(arrow = T) {
     mutate(
       file = paste0(
         !!sym("base_dir"),
-        "/aggregate_level=", aggregations, "/trade_flow=",
-        !!sym("flow"), "/year=", !!sym("year")),
+        "/", aggregations, "/",
+        !!sym("flow"), "/", !!sym("year")),
       exists = file.exists(file)
     )
 
   update_years <- raw_subdirs_parquet %>%
+    group_by(!!sym("year")) %>%
+    summarise(exists = as.logical(max(!!sym("exists")))) %>%
     filter(exists == FALSE | !!sym("year") %in% years_to_update) %>%
     select(!!sym("year")) %>%
     distinct() %>%

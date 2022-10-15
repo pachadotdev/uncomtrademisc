@@ -4,7 +4,13 @@
 \alias{data_downloading}
 \title{A wrapper to GNU Parallel and wget for faster downloads}
 \usage{
-data_downloading(arrow = T)
+data_downloading(
+  arrow = T,
+  token = NULL,
+  dataset = NULL,
+  remove_old_files = NULL,
+  subset_years = NULL
+)
 }
 \arguments{
 \item{arrow}{Set to `FALSE` to just download the datasets without

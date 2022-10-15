@@ -1,3 +1,8 @@
+# uncomtrademisc 2022.10.15
+
+* avoids re-creating parquet files for years without new data
+* removes old zip files for years with new data
+
 # uncomtrademisc 2022.10.02
 
 * `add_gravity_cols()` now uses the `cepiigravity` package for the data
