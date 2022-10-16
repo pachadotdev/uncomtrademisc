@@ -30,7 +30,7 @@ download_files <- function(download_links, parallel) {
       unlink("commands.txt")
     } else {
       messageline("Downloading files sequentially...")
-      download.file(download_links$url, download_links$new_file)
+      lapply(download.file, url = download_links$url, destfile= download_links$new_file)
     }
   } else {
     messageline("Windows detected, downloading files sequentially...")
