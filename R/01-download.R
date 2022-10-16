@@ -332,6 +332,13 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
     files_to_remove <- list.files(raw_dir_zip,
                                   pattern = paste(paste0("ps-",years_to_update), collapse = "|"),
                                   full.names = T)
+    files_to_remove <- data.frame(
+      file = files_to_remove,
+      year = gsub("_freq.*", "", gsub(".*_ps-", "", files_to_remove))
+    ) %>%
+      group_by(!!sym("year")) %>%
+      filter(!!sym("file") != max(!!sym("file"))) %>%
+      pull(!!sym("file"))
     lapply(files_to_remove, file_remove)
   }
 
