@@ -9,13 +9,24 @@ data_downloading(
   token = NULL,
   dataset = NULL,
   remove_old_files = NULL,
-  subset_years = NULL
+  subset_years = NULL,
+  parallel = NULL
 )
 }
 \arguments{
 \item{arrow}{Set to `FALSE` to just download the datasets without
 converting to Apache Arrow. Otherwise keep this set to `TRUE`, which
 eases posterior analysis and modeling.}
+
+\item{token}{parameter for non-interactive calls, otherwise it shows a prompt}
+
+\item{dataset}{parameter for non-interactive calls, otherwise it shows a prompt}
+
+\item{remove_old_files}{parameter for non-interactive calls, otherwise it shows a prompt}
+
+\item{subset_years}{parameter for non-interactive calls, otherwise it shows a prompt}
+
+\item{parallel}{parameter for non-interactive calls, otherwise it shows a prompt}
 }
 \description{
 COMPLETE DESC...

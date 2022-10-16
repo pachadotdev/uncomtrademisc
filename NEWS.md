@@ -2,6 +2,7 @@
 
 * avoids re-creating parquet files for years without new data
 * removes old zip files for years with new data
+* allow sequential or parallel downloads on Linux/MacOS
 
 # uncomtrademisc 2022.10.02
 

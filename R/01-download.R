@@ -20,13 +20,18 @@ check_token <- function() {
 }
 
 #' @importFrom utils download.file
-download_files <- function(download_links) {
+download_files <- function(download_links, parallel) {
   if (Sys.info()[['sysname']] != "Windows") {
-    messageline("Downloading files in parallel...")
-    base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=60 -O %s %s"
-    writeLines(sprintf(base_command, download_links$new_file, download_links$url), "commands.txt")
-    system("parallel --jobs 4 < commands.txt")
-    unlink("commands.txt")
+    if (isTRUE(parallel)) {
+      messageline("Downloading files in parallel...")
+      base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=60 -O %s %s"
+      writeLines(sprintf(base_command, download_links$new_file, download_links$url), "commands.txt")
+      system("parallel --jobs 4 < commands.txt")
+      unlink("commands.txt")
+    } else {
+      messageline("Downloading files sequentially...")
+      download.file(download_links$url, download_links$new_file)
+    }
   } else {
     messageline("Windows detected, downloading files sequentially...")
     download.file(download_links$url, download_links$new_file)
@@ -163,10 +168,15 @@ convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_z
 #' @param arrow Set to `FALSE` to just download the datasets without
 #'     converting to Apache Arrow. Otherwise keep this set to `TRUE`, which
 #'     eases posterior analysis and modeling.
+#' @param token parameter for non-interactive calls, otherwise it shows a prompt
+#' @param dataset parameter for non-interactive calls, otherwise it shows a prompt
+#' @param remove_old_files parameter for non-interactive calls, otherwise it shows a prompt
+#' @param subset_years parameter for non-interactive calls, otherwise it shows a prompt
+#' @param parallel parameter for non-interactive calls, otherwise it shows a prompt
 #'
 #' @export
 data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old_files = NULL,
-                             subset_years = NULL) {
+                             subset_years = NULL, parallel = NULL) {
   if (is.null(token)) { check_token() }
 
   # download ----
@@ -190,6 +200,14 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
   if (is.null(subset_years)) {
     subset_years <- readline(prompt = "Years to download (i.e. `2000:2020`, hit enter to download all available data): ")
     subset_years <- as.numeric(unlist(strsplit(subset_years, ":")))
+  }
+
+  if (is.null(parallel)) {
+    parallel <- menu(
+      c("yes", "no"),
+      title = "Download in parallel:",
+      graphics = F
+    )
   }
 
   classification <- ifelse(dataset < 6, "hs", "sitc")
@@ -343,7 +361,7 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
   }
 
   if (length(years_to_update) > 0) {
-    download_files(download_links)
+    download_files(download_links, parallel = parallel)
   }
 
   download_links <- download_links %>%
