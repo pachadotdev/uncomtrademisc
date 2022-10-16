@@ -24,7 +24,7 @@ download_files <- function(download_links, parallel) {
   if (Sys.info()[['sysname']] != "Windows") {
     if (isTRUE(parallel)) {
       messageline("Downloading files in parallel...")
-      base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=60 -O %s %s"
+      base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=180 -O %s %s"
       writeLines(sprintf(base_command, download_links$new_file, download_links$url), "commands.txt")
       system("parallel --jobs 4 < commands.txt")
       unlink("commands.txt")
@@ -32,22 +32,28 @@ download_files <- function(download_links, parallel) {
       messageline("Downloading files sequentially...")
       lapply(seq_along(download_links$url),
              function(x) {
-               download.file(
-                 url = download_links$url[[x]],
-                 destfile = download_links$new_file[[x]],
-                 method = "wget"
-               )
+               base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=180 -O %s %s"
+               base_command <- sprintf(base_command, download_links$new_file[[x]], download_links$url[[x]])
+               if (file.exists(download_links$new_file[[x]])) {
+                 return(TRUE)
+               } else {
+                 system(base_command)
+               }
              })
     }
   } else {
     messageline("Windows detected, downloading files sequentially...")
     lapply(seq_along(download_links$url),
            function(x) {
-             download.file(
-               url = download_links$url[[x]],
-               destfile = download_links$new_file[[x]],
-               method = "auto"
-             )
+             if (file.exists(download_links$new_file[[x]])) {
+               return(TRUE)
+             } else {
+               download.file(
+                 url = download_links$url[[x]],
+                 destfile = download_links$new_file[[x]],
+                 method = "auto"
+               )
+             }
            })
   }
 }
