@@ -30,11 +30,25 @@ download_files <- function(download_links, parallel) {
       unlink("commands.txt")
     } else {
       messageline("Downloading files sequentially...")
-      lapply(download.file, url = download_links$url, destfile= download_links$new_file)
+      lapply(seq_along(download_links$url),
+             function(x) {
+               download.file(
+                 url = download_links$url[[x]],
+                 destfile = download_links$new_file[[x]],
+                 method = "wget"
+               )
+             })
     }
   } else {
     messageline("Windows detected, downloading files sequentially...")
-    download.file(download_links$url, download_links$new_file)
+    lapply(seq_along(download_links$url),
+           function(x) {
+             download.file(
+               url = download_links$url[[x]],
+               destfile = download_links$new_file[[x]],
+               method = "auto"
+             )
+           })
   }
 }
 
@@ -205,7 +219,7 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
   if (is.null(parallel)) {
     parallel <- menu(
       c("yes", "no"),
-      title = "Download in parallel:",
+      title = "Download in parallel (even when parallel is faster, with UN COMTRADE is better to download files 1-by-1 at 300-500 kb/s and wait):",
       graphics = F
     )
   }
