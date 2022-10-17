@@ -797,6 +797,8 @@ update_tariffs <- function(con, path = "tariffs") {
 #' @importFrom dplyr select everything mutate distinct inner_join
 #' @export
 update_distances <- function(con) {
+  stopifnot(isTRUE(is_installed("cepiigeodist")))
+
   dbSendQuery(con, "DROP TABLE IF EXISTS public.distances")
 
   dbSendQuery(

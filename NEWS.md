@@ -1,3 +1,9 @@
+# uncomtrademisc 2022.10.17
+
+* uses gravity variables from UTSIC Dynamic Gravity Dataset instead of CEPII
+* uses CEPII distances to keep the distances table in the server the same
+* removes all modeling functions (no sucess at modeling CIF/FOB ratio with decent R2)
+
 # uncomtrademisc 2022.10.15
 
 * avoids re-creating parquet files for years without new data

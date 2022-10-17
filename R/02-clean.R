@@ -592,14 +592,19 @@ tidy_flows <- function(year,
 #' @importFrom utils data
 #' @export
 add_gravity_cols <- function(d, y = NULL, path = "attributes") {
-  stopifnot(isTRUE(is_installed("cepiigravity")))
+  stopifnot(isTRUE(is_installed("usitcgravity")))
+  stopifnot(isTRUE(is_installed("duckdb")))
 
-  con <- cepiigravity::gravity_connect()
+  con <- usitcgravity::usitcgravity_connect()
 
   gravity <- tbl(con, "gravity") %>%
     filter(!!sym("year") == y) %>%
     collect() %>%
-    select(-c("year", "iso3num_o", "iso3num_d"))
+    select(-c("year", "dynamic_code_o", "dynamic_code_d")) %>%
+    mutate(
+      iso3_o = tolower(!!sym("iso3_o")),
+      iso3_d = tolower(!!sym("iso3_d"))
+    )
 
   duckdb::dbDisconnect(con, shutdown=TRUE)
 
