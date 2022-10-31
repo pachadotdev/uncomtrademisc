@@ -1,3 +1,7 @@
+# uncomtrademisc 2022.10.31
+
+* allows to download to sub-directories with the subdir parameter
+
 # uncomtrademisc 2022.10.17
 
 * uses gravity variables from UTSIC Dynamic Gravity Dataset instead of CEPII

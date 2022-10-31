@@ -661,6 +661,265 @@ filter_kg <- function(d, ton = 1000) {
     )
 }
 
+#' Add raw UN COMTRADE datasets in Arrow
+#' @importFrom arrow schema int32 string
+#' @param path the top directory in the Arrow tree
+#' @export
+open_uncomtrade_arrow <- function(path = NULL) {
+  open_dataset(
+    path,
+    partitioning = schema(
+      digits = int32(), flow = string(), year = int32(), reporter_iso = string())
+  )
+}
+
+#' Tidy flows by completing from older HS/SITC datasets
+#' @importFrom stats median
+#' @importFrom rlang :=
+#' @param y year
+#' @param path the top directory in the Arrow tree
+#' @param from HS/SITC codes in the data (i.e., "sitc2")
+#' @param to HS/SITC codes to convert the data to (i.e., "hs92")
+#' @export
+tidy_flows_multiple_codes <-   function(y, path, from, to) {
+  message(y)
+
+  d <- open_uncomtrade_arrow(path = path)
+
+  imports <- d %>%
+    filter(
+      !!sym("digits") == 4L,
+      !!sym("year") == y,
+      !!sym("flow") == "import"
+    ) %>%
+    filter(
+      !(!!sym("reporter_iso") %in% c("all","wld")),
+      !(!!sym("partner_iso") %in% c("all","wld"))
+    ) %>%
+    select(!!sym("year"), importer_iso = !!sym("reporter_iso"),
+           exporter_iso = !!sym("partner_iso"),
+           !!sym("commodity_code"), trade_value_usd_imp = !!sym("trade_value_usd")) %>%
+    collect() %>%
+    group_by(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"), !!sym("commodity_code")) %>%
+    summarise_if(is.double, sum, na.rm = T) %>%
+    ungroup()
+
+  reimports <- d %>%
+    filter(
+      !!sym("digits") == 4L,
+      !!sym("year") == y,
+      !!sym("flow") == "re-import"
+    ) %>%
+    filter(
+      !(!!sym("reporter_iso") %in% c("all","wld")),
+      !(!!sym("partner_iso") %in% c("all","wld"))
+    ) %>%
+    select(!!sym("year"), importer_iso = !!sym("reporter_iso"),
+           exporter_iso = !!sym("partner_iso"),
+           !!sym("commodity_code"), trade_value_usd_imp = !!sym("trade_value_usd")) %>%
+    collect() %>%
+    group_by(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"), !!sym("commodity_code")) %>%
+    summarise_if(is.double, sum, na.rm = T) %>%
+    ungroup()
+
+  imports <- imports %>%
+    left_join(reimports, by =  c("year", "importer_iso", "exporter_iso", "commodity_code")) %>%
+    mutate_if(is.double, function(x) ifelse(is.na(x), 0, x)) %>%
+    mutate(trade_value_usd_imp = pmax(!!sym("trade_value_usd_imp.x") - !!sym("trade_value_usd_imp.y"), 0)) %>%
+    select(-!!sym("trade_value_usd_imp.x"), -!!sym("trade_value_usd_imp.y"))
+
+  rm(reimports)
+
+  exports <- d %>%
+    filter(
+      !!sym("digits") == 4L,
+      !!sym("year") == y,
+      !!sym("flow") == "export"
+    ) %>%
+    filter(
+      !(!!sym("reporter_iso") %in% c("all","wld")),
+      !(!!sym("partner_iso") %in% c("all","wld"))
+    ) %>%
+    select(!!sym("year"), exporter_iso = !!sym("reporter_iso"),
+           importer_iso = !!sym("partner_iso"),
+           !!sym("commodity_code"), trade_value_usd_exp = !!sym("trade_value_usd")) %>%
+    collect() %>%
+    group_by(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"), !!sym("commodity_code")) %>%
+    summarise_if(is.double, sum, na.rm = T) %>%
+    ungroup()
+
+  reexports <- d %>%
+    filter(
+      !!sym("digits") == 4L,
+      !!sym("year") == y,
+      !!sym("flow") == "re-export"
+    ) %>%
+    filter(
+      !(!!sym("reporter_iso") %in% c("all","wld")),
+      !(!!sym("partner_iso") %in% c("all","wld"))
+    ) %>%
+    select(!!sym("year"), exporter_iso = !!sym("reporter_iso"),
+           importer_iso = !!sym("partner_iso"),
+           !!sym("commodity_code"), trade_value_usd_exp = !!sym("trade_value_usd")) %>%
+    collect() %>%
+    group_by(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"), !!sym("commodity_code")) %>%
+    summarise_if(is.double, sum, na.rm = T) %>%
+    ungroup()
+
+  exports <- exports %>%
+    left_join(reexports, by = c("year", "importer_iso", "exporter_iso", "commodity_code")) %>%
+    mutate_if(is.double, function(x) ifelse(is.na(x), 0, x)) %>%
+    mutate(trade_value_usd_exp = pmax(!!sym("trade_value_usd_exp.x") - !!sym("trade_value_usd_exp.y"), 0)) %>%
+    select(-!!sym("trade_value_usd_exp.x"), -!!sym("trade_value_usd_exp.y"))
+
+  rm(reexports)
+
+  imports <- imports %>%
+    full_join(exports, by = c("year", "importer_iso", "exporter_iso", "commodity_code")) %>%
+    mutate(year = y) %>%
+    mutate_if(is.double, function(x) ifelse(is.na(x), 0, x))
+
+  rm(exports)
+
+  if (from != to) {
+    codes <- uncomtrademisc::product_correlation %>%
+      select(!!sym(from), !!sym(to)) %>%
+      filter(!!sym(from) != "NULL", !!sym(to) != "NULL") %>%
+      mutate(!!sym(from) := substr(!!sym(from), 1, 4), !!sym(to) := substr(!!sym(to), 1, 4)) %>%
+      arrange(!!sym(from)) %>%
+      distinct(!!sym(from), .keep_all = T) %>%
+      group_by(!!sym(from)) %>%
+      arrange(!!sym(to)) %>%
+      summarise(!!sym(to) := min(!!sym(to)))
+
+    imports <- imports %>%
+      left_join(codes, by = c("commodity_code" = from)) %>%
+      select(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"),
+             commodity_code = !!sym("hs12"), !!sym("trade_value_usd_imp"),
+             !!sym("trade_value_usd_exp")) %>%
+      mutate(
+        commodity_code = case_when(
+          is.na(!!sym("commodity_code")) ~ "9999",
+          TRUE ~ !!sym("commodity_code")
+        )
+      ) %>%
+      group_by(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"),
+               !!sym("commodity_code")) %>%
+      summarise_if(is.double, sum, na.rm = T) %>%
+      ungroup()
+
+    rm(codes)
+  } else {
+    imports <- imports %>%
+      select(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"),
+             !!sym("commodity_code"), !!sym("trade_value_usd_imp"),
+             !!sym("trade_value_usd_exp")) %>%
+      mutate(
+        commodity_code = case_when(
+          is.na(!!sym("commodity_code")) ~ "9999",
+          TRUE ~ !!sym("commodity_code")
+        )
+      ) %>%
+      group_by(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"),
+               !!sym("commodity_code")) %>%
+      summarise_if(is.double, sum, na.rm = T) %>%
+      ungroup()
+  }
+
+  # imports <- imports %>%
+  #   group_by(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"), !!sym("commodity_code")) %>%
+  #   summarise_if(is.double, sum, na.rm = T) %>%
+  #   ungroup() %>%
+  #   # mutate(trade_value_usd_bal = !!sym("trade_value_usd_imp") + !!sym("trade_value_usd_exp")) %>%
+  #   # filter(!!sym("trade_value_usd_bal") > 0) %>%
+  #   # select(-!!sym("trade_value_usd_bal")) %>%
+  #   compute_ratios()
+
+  imports <- imports %>%
+    compute_ratios()
+
+  importerweights <- imports %>%
+    filter(is.finite(!!sym("cif_fob_ratio"))) %>%
+    group_by(!!sym("importer_iso")) %>%
+    summarise(importer_weight = median(!!sym("cif_fob_weights"), na.rm = T))
+
+  exporterweights <- imports %>%
+    filter(is.finite(!!sym("cif_fob_ratio"))) %>%
+    group_by(!!sym("exporter_iso")) %>%
+    summarise(exporter_weight = median(!!sym("cif_fob_weights"), na.rm = T))
+
+  # foo <- imports %>%
+  #   left_join(importerweights) %>%
+  #   left_join(exporterweights) %>%
+  #   mutate(
+  #     importer_weight = ifelse(is.na(!!sym("importer_weight")), 0, !!sym("importer_weight")),
+  #     exporter_weight = ifelse(is.na(!!sym("exporter_weight")), 0, !!sym("exporter_weight"))
+  #   ) %>%
+  #   mutate(
+  #     trade_value_usd_imp_imputed = case_when(
+  #       !!sym("exporter_weight") > !!sym("importer_weight") ~ !!sym("trade_value_usd_exp"),
+  #       !!sym("exporter_weight") <= !!sym("importer_weight") ~ !!sym("trade_value_usd_imp")
+  #     ),
+  #     trade_source = case_when(
+  #       !!sym("exporter_weight") > !!sym("importer_weight") ~ "e",
+  #       !!sym("exporter_weight") <= !!sym("importer_weight") ~ "i"
+  #     ),
+  #     reported_by = case_when(
+  #       !!sym("trade_value_usd_imp") > 0 & !!sym("trade_value_usd_exp") > 0 ~ "b",
+  #       !!sym("trade_value_usd_imp") > 0 & !!sym("trade_value_usd_exp") == 0 ~ "i",
+  #       !!sym("trade_value_usd_imp") == 0 & !!sym("trade_value_usd_exp") > 0 ~ "e",
+  #       !!sym("trade_value_usd_imp") == 0 & !!sym("trade_value_usd_exp") == 0 ~ "n"
+  #     )
+  #   )
+  #
+  # foo2 = foo %>%
+  #   filter(is.na(reported_by))
+
+  imports <- imports %>%
+    left_join(importerweights) %>%
+    left_join(exporterweights) %>%
+    mutate(
+      importer_weight = ifelse(is.na(!!sym("importer_weight")), 0, !!sym("importer_weight")),
+      exporter_weight = ifelse(is.na(!!sym("exporter_weight")), 0, !!sym("exporter_weight"))
+    ) %>%
+    mutate(
+      trade_value_usd_imp_imputed = case_when(
+        !!sym("exporter_weight") > !!sym("importer_weight") ~ !!sym("trade_value_usd_exp"),
+        !!sym("exporter_weight") <= !!sym("importer_weight") ~ !!sym("trade_value_usd_imp")
+      ),
+      trade_source = case_when(
+        !!sym("exporter_weight") > !!sym("importer_weight") ~ "e",
+        !!sym("exporter_weight") <= !!sym("importer_weight") ~ "i"
+      ),
+      reported_by = case_when(
+        !!sym("trade_value_usd_imp") > 0 & !!sym("trade_value_usd_exp") > 0 ~ "b",
+        !!sym("trade_value_usd_imp") > 0 & !!sym("trade_value_usd_exp") == 0 ~ "i",
+        !!sym("trade_value_usd_imp") == 0 & !!sym("trade_value_usd_exp") > 0 ~ "e",
+        !!sym("trade_value_usd_imp") == 0 & !!sym("trade_value_usd_exp") == 0 ~ "n"
+      )
+    ) %>%
+    select(!!sym("year"), !!sym("importer_iso"), !!sym("exporter_iso"),
+           !!sym("commodity_code"), !!sym("trade_value_usd_imp_imputed"),
+           !!sym("trade_value_usd_imp"), !!sym("trade_value_usd_exp"),
+           !!sym("cif_fob_weights"),
+           !!sym("trade_source"), !!sym("reported_by")) %>%
+    filter(!!sym("trade_value_usd_imp_imputed") > 0)
+
+  # imports <- imports %>%
+  #   filter(!!sym("trade_value_usd_imp_imputed") > 0)
+
+  rm(importerweights, exporterweights)
+
+  uniquepairs <- imports %>%
+    select(!!sym("importer_iso"), !!sym("exporter_iso"), !!sym("commodity_code")) %>%
+    distinct() %>%
+    nrow()
+
+  stopifnot(uniquepairs == nrow(imports))
+
+  return(imports)
+}
+
 # filter_flow_impute <- function(d, y, f, a) {
 #   d %>%
 #     filter(

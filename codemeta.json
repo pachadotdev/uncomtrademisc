@@ -5,7 +5,7 @@
   "description": "Download and tidy UN COMTRADE data, including wrappers to easily convert to Apache Arrow and rearrange the datasets under Tidy Data logic.",
   "name": "uncomtrademisc: Miscellaneous functions to download and tidy UN COMTRADE bulk data",
   "license": "Apache License 2",
-  "version": "2022.10.15",
+  "version": "2022.10.31",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "R",
@@ -224,5 +224,5 @@
     },
     "SystemRequirements": "parallel: parallel (deb), 7z: p7zip-full (deb)"
   },
-  "fileSize": "243.411KB"
+  "fileSize": "254.648KB"
 }

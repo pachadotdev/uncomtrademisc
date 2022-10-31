@@ -3,3 +3,4 @@
 ^LICENSE\.md$
 ^NEWS\.md$
 ^dev$
+^codemeta\.json$

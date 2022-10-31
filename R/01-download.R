@@ -193,10 +193,11 @@ convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_z
 #' @param remove_old_files parameter for non-interactive calls, otherwise it shows a prompt
 #' @param subset_years parameter for non-interactive calls, otherwise it shows a prompt
 #' @param parallel parameter for non-interactive calls, otherwise it shows a prompt
+#' @param subdir parameter to download in a sub-directory such as `"finp"`, etc.
 #'
 #' @export
 data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old_files = NULL,
-                             subset_years = NULL, parallel = NULL) {
+                             subset_years = NULL, parallel = NULL, subdir = NULL) {
   if (is.null(token)) { check_token() }
 
   # download ----
@@ -278,7 +279,11 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
     years <- years[years >= min(subset_years) & years <= max(subset_years)]
   }
 
-  raw_dir <- sprintf("%s-rev%s", classification, revision)
+  if (is.null(subdir)) {
+    raw_dir <- sprintf("%s-rev%s", classification, revision)
+  } else {
+    raw_dir <- paste0(subdir, "/", sprintf("%s-rev%s", classification, revision))
+  }
   try(dir.create(raw_dir))
 
   raw_dir_zip <- sprintf("%s/%s", raw_dir, "zip")

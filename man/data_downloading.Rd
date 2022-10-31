@@ -10,7 +10,8 @@ data_downloading(
   dataset = NULL,
   remove_old_files = NULL,
   subset_years = NULL,
-  parallel = NULL
+  parallel = NULL,
+  subdir = NULL
 )
 }
 \arguments{
@@ -27,6 +28,8 @@ eases posterior analysis and modeling.}
 \item{subset_years}{parameter for non-interactive calls, otherwise it shows a prompt}
 
 \item{parallel}{parameter for non-interactive calls, otherwise it shows a prompt}
+
+\item{subdir}{parameter to download in a sub-directory such as `"finp"`, etc.}
 }
 \description{
 COMPLETE DESC...
