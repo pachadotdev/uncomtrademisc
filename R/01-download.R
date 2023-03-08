@@ -311,6 +311,9 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
           partner_iso = unspecified(!!sym("partner_iso"))
         )
 
+      d2 <- d2 %>%
+        arrange(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"))
+
       # print(d2)
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
