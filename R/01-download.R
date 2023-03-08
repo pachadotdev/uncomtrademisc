@@ -334,7 +334,6 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         	reporter_code INTEGER,
         	partner_code INTEGER,
         	commodity_code VARCHAR(6),
-        	commodity VARCHAR(300),
         	qty_unit_code INTEGER,
         	qty NUMERIC,
         	netweight_kg NUMERIC,
