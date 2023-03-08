@@ -277,10 +277,10 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
           `Is Leaf Code` = col_skip(),
           `Trade Flow Code` = col_skip(),
           `Trade Flow` = col_character(),
-          `Reporter Code` = col_skip(),
+          `Reporter Code` = col_integer(),
           Reporter = col_character(),
           `Reporter ISO` = col_character(),
-          `Partner Code` = col_skip(),
+          `Partner Code` = col_integer(),
           Partner = col_character(),
           `Partner ISO` = col_character(),
           `Commodity Code` = col_character(),
@@ -319,6 +319,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
         	country_iso VARCHAR(13),
+        	country_code INTEGER,
         	country VARCHAR(100))", paste0(gsub("-", "_", raw_dir), "_countries")))
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
@@ -330,6 +331,8 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         	year INTEGER,
         	reporter_iso VARCHAR(13),
         	partner_iso VARCHAR(13),
+        	reporter_code INTEGER,
+        	partner_code INTEGER,
         	commodity_code VARCHAR(6),
         	commodity VARCHAR(300),
         	qty_unit_code INTEGER,
@@ -354,18 +357,20 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         select(-!!sym("commodity"))
 
       countries <- d2 %>%
-        select(!!sym("reporter_iso"), !!sym("reporter")) %>%
+        select(!!sym("reporter_iso"), !!sym("reporter_code"), !!sym("reporter")) %>%
         distinct() %>%
         rename(
           country_iso = !!sym("reporter_iso"),
+          country_code = !!sym("reporter_code"),
           country = !!sym("reporter")
         ) %>%
         bind_rows(
           d2 %>%
-            select(!!sym("partner_iso"), !!sym("partner")) %>%
+            select(!!sym("partner_iso"), !!sym("partner_code"), !!sym("partner")) %>%
             distinct() %>%
             rename(
               country_iso = !!sym("partner_iso"),
+              country_code = !!sym("partner_code"),
               country = !!sym("partner")
             )
         ) %>%
