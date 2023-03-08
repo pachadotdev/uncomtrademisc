@@ -345,7 +345,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
       commodities <- d2 %>%
         select(!!sym("commodity_code"), !!sym("commodity")) %>%
         distinct() %>%
-        bind_rows(dbReadTable(con, "commodities")) %>%
+        bind_rows(dbReadTable(con, paste0(gsub("-", "_", raw_dir), "_commodities"))) %>%
         distinct() %>%
         arrange(!!sym("commodity_code"))
 
@@ -375,7 +375,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
             )
         ) %>%
         distinct() %>%
-        bind_rows(dbReadTable(con, "countries")) %>%
+        bind_rows(dbReadTable(con, paste0(gsub("-", "_", raw_dir), "_countries"))) %>%
         distinct() %>%
         arrange(!!sym("country_iso"))
 
@@ -389,7 +389,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
       units <- d2 %>%
         select(!!sym("qty_unit_code"), !!sym("qty_unit")) %>%
         distinct() %>%
-        bind_rows(dbReadTable(con, "units")) %>%
+        bind_rows(dbReadTable(con, paste0(gsub("-", "_", raw_dir), "_units"))) %>%
         distinct() %>%
         arrange(!!sym("qty_unit_code"))
 
