@@ -318,7 +318,6 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         	commodity VARCHAR(300))", paste0(gsub("-", "_", raw_dir), "_commodities")))
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
-        	year INTEGER,
         	country_iso VARCHAR(13),
         	country VARCHAR(100))", paste0(gsub("-", "_", raw_dir), "_countries")))
 
