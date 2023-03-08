@@ -188,11 +188,11 @@ con_local <- function() {
   )
 }
 
-#' @importFrom dplyr filter mutate mutate_if left_join group_by distinct
+#' @importFrom dplyr filter mutate mutate_if left_join group_by distinct arrange
 #' @importFrom stringr str_to_lower str_squish
 #' @importFrom RPostgres dbSendQuery dbWriteTable dbDisconnect
 #'     dbListTables
-#' @importFrom DBI dbGetQuery
+#' @importFrom DBI dbGetQuery dbReadTable
 #' @importFrom janitor clean_names
 #' @importFrom readr cols col_double col_integer col_character col_skip
 #' @importFrom purrr map
@@ -269,18 +269,18 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
       d2 <- read_csv(
         csv,
         col_types = cols(
-          Classification = col_character(),
+          Classification = col_skip(),
           Year = col_integer(),
-          Period = col_integer(),
-          `Period Desc.` = col_integer(),
+          Period = col_skip(),
+          `Period Desc.` = col_skip(),
           `Aggregate Level` = col_integer(),
-          `Is Leaf Code` = col_integer(),
-          `Trade Flow Code` = col_integer(),
+          `Is Leaf Code` = col_skip(),
+          `Trade Flow Code` = col_skip(),
           `Trade Flow` = col_character(),
-          `Reporter Code` = col_integer(),
+          `Reporter Code` = col_skip(),
           Reporter = col_character(),
           `Reporter ISO` = col_character(),
-          `Partner Code` = col_integer(),
+          `Partner Code` = col_skip(),
           Partner = col_character(),
           `Partner ISO` = col_character(),
           `Commodity Code` = col_character(),
@@ -290,7 +290,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
           Qty = col_double(),
           `Netweight (kg)` = col_double(),
           `Trade Value (US$)` = col_double(),
-          Flag = col_integer())
+          Flag = col_skip())
       ) %>%
         clean_names()
 
@@ -299,7 +299,8 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         filter(
           !!sym("trade_flow") == tf,
           !!sym("aggregate_level") == al
-        )
+        ) %>%
+        select(-!!sym("trade_flow"), -!!sym("aggregate_level"))
 
       gc()
 
@@ -307,38 +308,93 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         rename(trade_value_usd = !!sym("trade_value_us")) %>%
         mutate(
           reporter_iso = unspecified(!!sym("reporter_iso")),
-          partner_iso = unspecified(!!sym("partner_iso")),
-          trade_flow = unspecified(!!sym("trade_flow"))
+          partner_iso = unspecified(!!sym("partner_iso"))
         )
 
       # print(d2)
 
+      dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
+        	commodity_code VARCHAR(6),
+        	commodity VARCHAR(300))", paste0(gsub("-", "_", raw_dir), "_commodities")))
+
+      dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
+        	year INTEGER,
+        	country_iso VARCHAR(13),
+        	country VARCHAR(100))", paste0(gsub("-", "_", raw_dir), "_countries")))
+
+      dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
+        	qty_unit_code INTEGER,
+        	qty_unit VARCHAR(100))", paste0(gsub("-", "_", raw_dir), "_units")))
+
       dbSendQuery(con, sprintf(
         "CREATE TABLE IF NOT EXISTS %s (
-        	aggregate_level INTEGER,
-        	trade_flow VARCHAR(10),
-        	classification VARCHAR(2),
         	year INTEGER,
-        	period INTEGER,
-        	period_desc INTEGER,
-        	is_leaf_code INTEGER,
-        	trade_flow_code INTEGER,
-        	reporter_code INTEGER,
-        	reporter VARCHAR(100),
         	reporter_iso VARCHAR(13),
-        	partner_code INTEGER,
-        	partner VARCHAR(100),
         	partner_iso VARCHAR(13),
         	commodity_code VARCHAR(6),
         	commodity VARCHAR(300),
         	qty_unit_code INTEGER,
-        	qty_unit VARCHAR(100),
         	qty NUMERIC,
         	netweight_kg NUMERIC,
-        	trade_value_usd NUMERIC,
-        	flag INTEGER)", table_name))
+        	trade_value_usd NUMERIC)", table_name))
 
       dbSendQuery(con, sprintf("DELETE FROM %s WHERE year=%s", table_name, yrs[t]))
+
+      commodities <- d2 %>%
+        select(!!sym("commodity_code"), !!sym("commodity")) %>%
+        distinct() %>%
+        bind_rows(dbReadTable(con, "commodities")) %>%
+        distinct() %>%
+        arrange(!!sym("commodity_code"))
+
+      dbWriteTable(con, "commodities", commodities, append = F, overwrite = T)
+
+      rm(commodities)
+
+      d2 <- d2 %>%
+        select(-!!sym("commodity"))
+
+      countries <- d2 %>%
+        select(!!sym("reporter_iso"), !!sym("reporter")) %>%
+        distinct() %>%
+        rename(
+          country_iso = !!sym("reporter_iso"),
+          country = !!sym("reporter")
+        ) %>%
+        bind_rows(
+          d2 %>%
+            select(!!sym("partner_iso"), !!sym("partner")) %>%
+            distinct() %>%
+            rename(
+              country_iso = !!sym("partner_iso"),
+              country = !!sym("partner")
+            )
+        ) %>%
+        distinct() %>%
+        bind_rows(dbReadTable(con, "countries")) %>%
+        distinct() %>%
+        arrange(!!sym("country_iso"))
+
+      dbWriteTable(con, "countries", countries, append = F, overwrite = T)
+
+      rm(countries)
+
+      d2 <- d2 %>%
+        select(-!!sym("reporter"), -!!sym("partner"))
+
+      units <- d2 %>%
+        select(!!sym("qty_unit_code"), !!sym("qty_unit")) %>%
+        distinct() %>%
+        bind_rows(dbReadTable(con, "units")) %>%
+        distinct() %>%
+        arrange(!!sym("qty_unit_code"))
+
+      dbWriteTable(con, "units", units, append = F, overwrite = T)
+
+      rm(units)
+
+      d2 <- d2 %>%
+        select(-!!sym("qty_unit"))
 
       dbWriteTable(
         con,

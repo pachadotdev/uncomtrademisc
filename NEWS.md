@@ -1,6 +1,7 @@
 # uncomtrademisc 2023.03.07
 
 * Add requirements for Red Hat Linux
+* Normalizes tables in SQL to save space
 
 # uncomtrademisc 2022.12.31
 
