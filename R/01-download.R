@@ -172,6 +172,208 @@ convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_z
   file_remove(csv); rm(d); gc()
 }
 
+#' Connect to Local PostgreSQL
+#'
+#' Open a SQL connection to local PSQL server
+#'
+#' @importFrom RPostgres Postgres dbConnect
+#' @export
+con_local <- function() {
+  dbConnect(
+    Postgres(),
+    host = "localhost",
+    dbname = "uncomtrade_commodities",
+    user = Sys.getenv("LOCAL_SQL_USR"),
+    password = Sys.getenv("LOCAL_SQL_PWD")
+  )
+}
+
+#' @importFrom dplyr filter mutate mutate_if left_join group_by distinct
+#' @importFrom stringr str_to_lower str_squish
+#' @importFrom RPostgres dbSendQuery dbWriteTable dbDisconnect
+#'     dbListTables
+#' @importFrom DBI dbGetQuery
+#' @importFrom janitor clean_names
+#' @importFrom readr cols col_double col_integer col_character col_skip
+#' @importFrom purrr map
+#' @importFrom rlang sym
+convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
+  messageline(yrs[t])
+
+  con <- con_local()
+
+  tables <- dbListTables(con)
+  tables <- grep(paste(gsub("-", "_", raw_dir), "tf_import_al_0", sep = "_"),
+                 tables, value = T)
+  rows_in_db <- rep(NA, length(tables))
+  for (i in seq_along(tables)) {
+    rows_in_db[i] <- as.numeric(dbGetQuery(con, sprintf("SELECT COUNT(year) as year FROM %s WHERE year = %s", tables[[i]], yrs[t])))
+  }
+
+  rows_in_db <- min(rows_in_db)
+  if (is.infinite(rows_in_db)) { rows_in_db <- 0 }
+
+  if ((!yrs[t] %in% years_to_update) | (rows_in_db > 0)) {
+    dbDisconnect(con)
+    return(TRUE)
+  }
+
+  zip <- grep(paste0(yrs[t], "_freq-A"), raw_zip, value = T)
+
+  csv <- zip %>%
+    str_replace("/zip/", "/") %>%
+    str_replace("zip$", "csv")
+
+  extract(zip, raw_dir)
+
+  d <- read_csv(
+    csv,
+    col_types = cols(
+      Classification = col_skip(),
+      Year = col_skip(),
+      Period = col_skip(),
+      `Period Desc.` = col_skip(),
+      `Aggregate Level` = col_integer(),
+      `Is Leaf Code` = col_skip(),
+      `Trade Flow Code` = col_skip(),
+      `Trade Flow` = col_character(),
+      `Reporter Code` = col_skip(),
+      Reporter = col_skip(),
+      `Reporter ISO` = col_skip(),
+      `Partner Code` = col_skip(),
+      Partner = col_skip(),
+      `Partner ISO` = col_skip(),
+      `Commodity Code` = col_skip(),
+      Commodity = col_skip(),
+      `Qty Unit Code` = col_skip(),
+      `Qty Unit` = col_skip(),
+      Qty = col_skip(),
+      `Netweight (kg)` = col_skip(),
+      `Trade Value (US$)` = col_skip(),
+      Flag = col_skip())
+  ) %>%
+    clean_names() %>%
+    mutate_if(is.character, function(x) { str_to_lower(str_squish(x)) }) %>%
+    distinct(!!sym("trade_flow"), !!sym("aggregate_level"))
+
+  d <- d %>%
+    filter(!!sym("aggregate_level") %in% 5:6)
+
+  map2(
+    d$trade_flow, d$aggregate_level,
+    function(tf,al) {
+      table_name <- paste(gsub("-", "_", raw_dir), "tf", gsub("-", "_", tf), "al", al, sep = "_")
+
+      message(table_name)
+
+      d2 <- read_csv(
+        csv,
+        col_types = cols(
+          Classification = col_character(),
+          Year = col_integer(),
+          Period = col_integer(),
+          `Period Desc.` = col_integer(),
+          `Aggregate Level` = col_integer(),
+          `Is Leaf Code` = col_integer(),
+          `Trade Flow Code` = col_integer(),
+          `Trade Flow` = col_character(),
+          `Reporter Code` = col_integer(),
+          Reporter = col_character(),
+          `Reporter ISO` = col_character(),
+          `Partner Code` = col_integer(),
+          Partner = col_character(),
+          `Partner ISO` = col_character(),
+          `Commodity Code` = col_character(),
+          Commodity = col_character(),
+          `Qty Unit Code` = col_integer(),
+          `Qty Unit` = col_character(),
+          Qty = col_double(),
+          `Netweight (kg)` = col_double(),
+          `Trade Value (US$)` = col_double(),
+          Flag = col_integer())
+      ) %>%
+        clean_names()
+
+      d2 <- d2 %>%
+        mutate_if(is.character, function(x) { str_to_lower(str_squish(x)) }) %>%
+        filter(
+          !!sym("trade_flow") == tf,
+          !!sym("aggregate_level") == al
+        )
+
+      gc()
+
+      d2 <- d2 %>%
+        rename(trade_value_usd = !!sym("trade_value_us")) %>%
+        mutate(
+          reporter_iso = unspecified(!!sym("reporter_iso")),
+          partner_iso = unspecified(!!sym("partner_iso")),
+          trade_flow = unspecified(!!sym("trade_flow"))
+        )
+
+      # print(d2)
+
+      dbSendQuery(con, sprintf(
+        "CREATE TABLE IF NOT EXISTS %s (
+        	aggregate_level INTEGER,
+        	trade_flow VARCHAR(10),
+        	classification VARCHAR(2),
+        	year INTEGER,
+        	period INTEGER,
+        	period_desc INTEGER,
+        	is_leaf_code INTEGER,
+        	trade_flow_code INTEGER,
+        	reporter_code INTEGER,
+        	reporter VARCHAR(100),
+        	reporter_iso VARCHAR(13),
+        	partner_code INTEGER,
+        	partner VARCHAR(100),
+        	partner_iso VARCHAR(13),
+        	commodity_code VARCHAR(6),
+        	commodity VARCHAR(300),
+        	qty_unit_code INTEGER,
+        	qty_unit VARCHAR(100),
+        	qty NUMERIC,
+        	netweight_kg NUMERIC,
+        	trade_value_usd NUMERIC,
+        	flag INTEGER)", table_name))
+
+      dbSendQuery(con, sprintf("DELETE FROM %s WHERE year=%s", table_name, yrs[t]))
+
+      dbWriteTable(
+        con,
+        table_name,
+        d2,
+        append = TRUE,
+        overwrite = FALSE
+      )
+
+      gc()
+    }
+  )
+
+  dbDisconnect(con)
+  file_remove(csv); rm(d); gc()
+}
+
+#' @importFrom RPostgres Postgres dbConnect dbSendQuery dbListTables dbDisconnect
+create_indexes_postgres <- function(raw_dir) {
+  message("rebuilding indexes...")
+  con <- con_local()
+  tables <- dbListTables(con)
+  tables <- grep(gsub("-", "_", raw_dir), tables, value = T)
+
+  for (table_name in tables) {
+    message(table_name)
+    dbSendQuery(con, sprintf("DROP INDEX IF EXISTS %s_year", table_name))
+    dbSendQuery(con, sprintf("DROP INDEX IF EXISTS %s_reporter_iso", table_name))
+    dbSendQuery(con, sprintf("CREATE INDEX %s_year ON %s (year)", table_name, table_name))
+    dbSendQuery(con, sprintf("CREATE INDEX %s_reporter_iso ON %s (reporter_iso)", table_name, table_name))
+  }
+
+  dbDisconnect(con)
+}
+
 # Mega function to download data ----
 
 #' A wrapper to GNU Parallel and wget for faster downloads
@@ -186,8 +388,9 @@ convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_z
 #' @importFrom rlang sym
 #'
 #' @param arrow Set to `FALSE` to just download the datasets without
-#'     converting to Apache Arrow. Otherwise keep this set to `TRUE`, which
-#'     eases posterior analysis and modeling.
+#'     converting to Apache Arrow.
+#' @param postgres Set to `FALSE` to just download the datasets without
+#'     converting to PostgreSQL
 #' @param token parameter for non-interactive calls, otherwise it shows a prompt
 #' @param dataset parameter for non-interactive calls, otherwise it shows a prompt
 #' @param remove_old_files parameter for non-interactive calls, otherwise it shows a prompt
@@ -196,7 +399,7 @@ convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_z
 #' @param subdir parameter to download in a sub-directory such as `"finp"`, etc.
 #'
 #' @export
-data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old_files = NULL,
+data_downloading <- function(arrow = F, postgres = F, token = NULL, dataset = NULL, remove_old_files = NULL,
                              subset_years = NULL, parallel = NULL, subdir = NULL) {
   if (is.null(token)) { check_token() }
 
@@ -371,9 +574,13 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
 
   years_to_update <- files_to_update$year
 
-  if (remove_old_files == 1L) {
+  if (length(years_to_update) > 0) {
+    download_files(download_links, parallel = parallel)
+  }
+
+  if (remove_old_files == 1) {
     files_to_remove <- list.files(raw_dir_zip,
-                                  pattern = paste(paste0("ps-",years_to_update), collapse = "|"),
+                                  pattern = paste(paste0("ps-",years), collapse = "|"),
                                   full.names = T)
     files_to_remove <- data.frame(
       file = files_to_remove,
@@ -383,10 +590,6 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
       filter(!!sym("file") != max(!!sym("file"))) %>%
       pull(!!sym("file"))
     lapply(files_to_remove, file_remove)
-  }
-
-  if (length(years_to_update) > 0) {
-    download_files(download_links, parallel = parallel)
   }
 
   download_links <- download_links %>%
@@ -405,8 +608,6 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
     )
   }
 
-  if (isFALSE(arrow)) return(TRUE)
-
   # convert to arrow ----
 
   if (classification == "sitc") {
@@ -415,38 +616,47 @@ data_downloading <- function(arrow = T, token = NULL, dataset = NULL, remove_old
     aggregations <- c(0,2,4,6)
   }
 
-  # re-create any missing/updated arrow dataset
-  raw_subdirs_parquet <- expand.grid(
-    base_dir = raw_dir_parquet,
-    aggregations = aggregations,
-    flow = c("import", "export", "re-import", "re-export"),
-    year = years
-  ) %>%
-    mutate(
-      file = paste0(
-        !!sym("base_dir"),
-        "/", aggregations, "/",
-        !!sym("flow"), "/", !!sym("year")),
-      exists = file.exists(file)
-    )
-
-  update_years <- raw_subdirs_parquet %>%
-    group_by(!!sym("year")) %>%
-    summarise(exists = as.logical(max(!!sym("exists")))) %>%
-    filter(exists == FALSE | !!sym("year") %in% years_to_update) %>%
-    select(!!sym("year")) %>%
-    distinct() %>%
-    pull()
-
   raw_zip <- list.files(
     path = raw_dir_zip,
     pattern = "\\.zip",
     full.names = T
   )
 
-  raw_zip <- grep(paste(paste0("ps-", update_years), collapse = "|"), raw_zip, value = TRUE)
+  if (isTRUE(arrow)) {
+    # re-create any missing/updated arrow dataset
+    raw_subdirs_parquet <- expand.grid(
+      base_dir = raw_dir_parquet,
+      aggregations = aggregations,
+      flow = c("import", "export", "re-import", "re-export"),
+      year = years
+    ) %>%
+      mutate(
+        file = paste0(
+          !!sym("base_dir"),
+          "/", aggregations, "/",
+          !!sym("flow"), "/", !!sym("year")),
+        exists = file.exists(file)
+      )
 
-  if (any(update_years > 0)) {
-    lapply(seq_along(update_years), convert_to_arrow, yrs = update_years, raw_dir_parquet, raw_subdirs_parquet, raw_zip)
+    update_years <- raw_subdirs_parquet %>%
+      group_by(!!sym("year")) %>%
+      summarise(exists = as.logical(max(!!sym("exists")))) %>%
+      filter(exists == FALSE | !!sym("year") %in% years_to_update) %>%
+      select(!!sym("year")) %>%
+      distinct() %>%
+      pull()
+
+    raw_zip <- grep(paste(paste0("ps-", update_years), collapse = "|"), raw_zip, value = TRUE)
+
+    if (any(update_years > 0)) {
+      lapply(seq_along(update_years), convert_to_arrow, yrs = update_years, raw_dir_parquet, raw_subdirs_parquet, raw_zip)
+    }
+  }
+
+  # convert to postgres ----
+
+  if (isTRUE(postgres)) {
+    lapply(seq_along(years), convert_to_postgres, yrs = years, raw_dir, raw_zip, years)
+    create_indexes_postgres(raw_dir)
   }
 }

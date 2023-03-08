@@ -4,7 +4,7 @@
 \alias{update_gdp_deflator}
 \title{Update GDP deflator table}
 \usage{
-update_gdp_deflator(con, path = "attributes")
+update_gdp_deflator(con, path = "gdp")
 }
 \arguments{
 \item{con}{SQL connection object}

@@ -4,7 +4,7 @@
 \alias{update_gdp}
 \title{Update GDP table}
 \usage{
-update_gdp(con, path = "attributes")
+update_gdp(con, path = "gdp")
 }
 \arguments{
 \item{con}{SQL connection object}

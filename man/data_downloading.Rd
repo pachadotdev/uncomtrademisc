@@ -5,7 +5,8 @@
 \title{A wrapper to GNU Parallel and wget for faster downloads}
 \usage{
 data_downloading(
-  arrow = T,
+  arrow = F,
+  postgres = F,
   token = NULL,
   dataset = NULL,
   remove_old_files = NULL,
@@ -16,8 +17,10 @@ data_downloading(
 }
 \arguments{
 \item{arrow}{Set to `FALSE` to just download the datasets without
-converting to Apache Arrow. Otherwise keep this set to `TRUE`, which
-eases posterior analysis and modeling.}
+converting to Apache Arrow.}
+
+\item{postgres}{Set to `FALSE` to just download the datasets without
+converting to PostgreSQL}
 
 \item{token}{parameter for non-interactive calls, otherwise it shows a prompt}
 

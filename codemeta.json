@@ -5,13 +5,13 @@
   "description": "Download and tidy UN COMTRADE data, including wrappers to easily convert to Apache Arrow and rearrange the datasets under Tidy Data logic.",
   "name": "uncomtrademisc: Miscellaneous functions to download and tidy UN COMTRADE bulk data",
   "license": "Apache License 2",
-  "version": "2022.10.31",
+  "version": "2023.3.7",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "R",
     "url": "https://r-project.org"
   },
-  "runtimePlatform": "R version 4.2.1 (2022-06-23)",
+  "runtimePlatform": "R version 4.2.2 (2022-10-31)",
   "author": [
     {
       "@type": "Person",
@@ -57,18 +57,6 @@
         "url": "https://cran.r-project.org"
       },
       "sameAs": "https://github.com/pachadotdev/cepiigeodist"
-    },
-    {
-      "@type": "SoftwareApplication",
-      "identifier": "duckdb",
-      "name": "duckdb",
-      "provider": {
-        "@id": "https://cran.r-project.org",
-        "@type": "Organization",
-        "name": "Comprehensive R Archive Network (CRAN)",
-        "url": "https://cran.r-project.org"
-      },
-      "sameAs": "https://CRAN.R-project.org/package=duckdb"
     }
   ],
   "softwareRequirements": {
@@ -86,6 +74,18 @@
     },
     "2": {
       "@type": "SoftwareApplication",
+      "identifier": "DBI",
+      "name": "DBI",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=DBI"
+    },
+    "3": {
+      "@type": "SoftwareApplication",
       "identifier": "dplyr",
       "name": "dplyr",
       "provider": {
@@ -96,7 +96,19 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=dplyr"
     },
-    "3": {
+    "4": {
+      "@type": "SoftwareApplication",
+      "identifier": "duckdb",
+      "name": "duckdb",
+      "provider": {
+        "@id": "https://cran.r-project.org",
+        "@type": "Organization",
+        "name": "Comprehensive R Archive Network (CRAN)",
+        "url": "https://cran.r-project.org"
+      },
+      "sameAs": "https://CRAN.R-project.org/package=duckdb"
+    },
+    "5": {
       "@type": "SoftwareApplication",
       "identifier": "janitor",
       "name": "janitor",
@@ -108,7 +120,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=janitor"
     },
-    "4": {
+    "6": {
       "@type": "SoftwareApplication",
       "identifier": "jsonlite",
       "name": "jsonlite",
@@ -120,7 +132,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=jsonlite"
     },
-    "5": {
+    "7": {
       "@type": "SoftwareApplication",
       "identifier": "magrittr",
       "name": "magrittr",
@@ -132,7 +144,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=magrittr"
     },
-    "6": {
+    "8": {
       "@type": "SoftwareApplication",
       "identifier": "purrr",
       "name": "purrr",
@@ -144,7 +156,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=purrr"
     },
-    "7": {
+    "9": {
       "@type": "SoftwareApplication",
       "identifier": "readr",
       "name": "readr",
@@ -156,7 +168,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=readr"
     },
-    "8": {
+    "10": {
       "@type": "SoftwareApplication",
       "identifier": "rlang",
       "name": "rlang",
@@ -168,7 +180,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=rlang"
     },
-    "9": {
+    "11": {
       "@type": "SoftwareApplication",
       "identifier": "RPostgres",
       "name": "RPostgres",
@@ -180,7 +192,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=RPostgres"
     },
-    "10": {
+    "12": {
       "@type": "SoftwareApplication",
       "identifier": "stringr",
       "name": "stringr",
@@ -192,7 +204,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=stringr"
     },
-    "11": {
+    "13": {
       "@type": "SoftwareApplication",
       "identifier": "tidyr",
       "name": "tidyr",
@@ -204,7 +216,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=tidyr"
     },
-    "12": {
+    "14": {
       "@type": "SoftwareApplication",
       "identifier": "tradestatistics",
       "name": "tradestatistics",
@@ -216,13 +228,13 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=tradestatistics"
     },
-    "13": {
+    "15": {
       "@type": "SoftwareApplication",
       "identifier": "R",
       "name": "R",
       "version": ">= 2.10"
     },
-    "SystemRequirements": "parallel: parallel (deb), 7z: p7zip-full (deb)"
+    "SystemRequirements": "parallel: parallel (deb), 7z: p7zip-full (deb), p7zip-plugins (rpm)"
   },
-  "fileSize": "254.648KB"
+  "fileSize": "262.556KB"
 }

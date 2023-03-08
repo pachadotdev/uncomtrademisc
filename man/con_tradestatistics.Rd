@@ -2,7 +2,7 @@
 % Please edit documentation in R/03-upload.R
 \name{con_tradestatistics}
 \alias{con_tradestatistics}
-\title{Connect to PostgreSQL}
+\title{Connect to Remote PostgreSQL}
 \usage{
 con_tradestatistics()
 }

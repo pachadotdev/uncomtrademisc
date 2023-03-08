@@ -1,4 +1,4 @@
-#' Connect to PostgreSQL
+#' Connect to Remote PostgreSQL
 #'
 #' Open a SQL connection to tradestatistics PSQL server
 #'
@@ -860,7 +860,7 @@ update_distances <- function(con) {
 #' @param path directory where the tidy data is
 #' @importFrom RPostgres dbSendQuery dbWriteTable
 #' @export
-update_gdp_deflator <- function(con, path = "attributes") {
+update_gdp_deflator <- function(con, path = "gdp") {
   dbSendQuery(con, "DROP TABLE IF EXISTS public.gdp_deflator")
 
   dbSendQuery(
@@ -885,7 +885,7 @@ update_gdp_deflator <- function(con, path = "attributes") {
 #' @param path directory where the tidy data is
 #' @importFrom RPostgres dbSendQuery dbWriteTable
 #' @export
-update_gdp <- function(con, path = "attributes") {
+update_gdp <- function(con, path = "gdp") {
   dbSendQuery(con, "DROP TABLE IF EXISTS public.gdp")
 
   dbSendQuery(

@@ -1,3 +1,15 @@
+# uncomtrademisc 2023.03.07
+
+* Add requirements for Red Hat Linux
+
+# uncomtrademisc 2022.12.31
+
+* Allows to save raw data in PostgreSQL
+
+# uncomtrademisc 2022.12.12
+
+* updates default path to gdp tables
+
 # uncomtrademisc 2022.10.31
 
 * allows to download to sub-directories with the subdir parameter
