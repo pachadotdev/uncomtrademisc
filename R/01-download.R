@@ -349,7 +349,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         distinct() %>%
         arrange(!!sym("commodity_code"))
 
-      dbWriteTable(con, "commodities", commodities, append = F, overwrite = T)
+      dbWriteTable(con, paste0(gsub("-", "_", raw_dir), "_commodities"), commodities, append = F, overwrite = T)
 
       rm(commodities)
 
@@ -379,7 +379,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         distinct() %>%
         arrange(!!sym("country_iso"))
 
-      dbWriteTable(con, "countries", countries, append = F, overwrite = T)
+      dbWriteTable(con, paste0(gsub("-", "_", raw_dir), "_countries"), countries, append = F, overwrite = T)
 
       rm(countries)
 
@@ -393,7 +393,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
         distinct() %>%
         arrange(!!sym("qty_unit_code"))
 
-      dbWriteTable(con, "units", units, append = F, overwrite = T)
+      dbWriteTable(con, paste0(gsub("-", "_", raw_dir), "_units"), units, append = F, overwrite = T)
 
       rm(units)
 
