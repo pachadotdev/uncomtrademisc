@@ -424,6 +424,7 @@ create_indexes_postgres <- function(raw_dir) {
   con <- con_local()
   tables <- dbListTables(con)
   tables <- grep(gsub("-", "_", raw_dir), tables, value = T)
+  tables <- grep("export|import", tables, value = T)
 
   for (table_name in tables) {
     message(table_name)
