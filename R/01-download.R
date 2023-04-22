@@ -92,7 +92,7 @@ con_local <- function() {
   dbConnect(
     Postgres(),
     host = "localhost",
-    dbname = "uncomtrade_commodities",
+    dbname = "uncomtrade",
     user = Sys.getenv("LOCAL_SQL_USR"),
     password = Sys.getenv("LOCAL_SQL_PWD")
   )
@@ -463,9 +463,6 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   raw_dir_zip <- sprintf("%s/%s", raw_dir, "zip")
   try(dir.create(raw_dir_zip))
 
-  raw_dir_parquet <- str_replace(raw_dir_zip, "zip", "parquet")
-  try(dir.create(raw_dir_parquet))
-
   try(
     old_file <- max(
       list.files(raw_dir, pattern = "downloaded-files.*csv", full.names = T), na.rm = T)
@@ -492,14 +489,16 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     file = NA
   )
 
-  files <- fromJSON(sprintf(
-    "https://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&px=%s&token=%s",
-    classification2,
-    Sys.getenv("COMTRADE_TOKEN"))) %>%
-    filter(!!sym("ps") %in% years) %>%
-    arrange(!!sym("ps"))
+  if (isFALSE(skip_updates)) {
+    files <- fromJSON(sprintf(
+      "https://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&px=%s&token=%s",
+      classification2,
+      Sys.getenv("COMTRADE_TOKEN"))) %>%
+      filter(!!sym("ps") %in% years) %>%
+      arrange(!!sym("ps"))
+  }
 
-  if (exists("old_download_links")) {
+  if (exists("old_download_links") & isFALSE(skip_updates)) {
     download_links <- download_links %>%
       mutate(
         file = paste0(raw_dir_zip, "/", files$name),
@@ -518,6 +517,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
         )
       )
   } else {
+    if (isFALSE(skip_updates)) {
     download_links <- download_links %>%
       mutate(
         file = paste0(raw_dir_zip, "/", files$name),
@@ -531,6 +531,9 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
         server_file_date = as.Date(!!sym("server_file_date") + 1, origin = "1970-01-01")
       ) %>%
       rename(new_file = file)
+    } else {
+      download_links <- old_download_links
+    }
   }
 
   if (isFALSE(skip_updates)) {
@@ -565,20 +568,22 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     lapply(files_to_remove, file_remove)
   }
 
-  download_links <- download_links %>%
-    select(!!sym("year"), !!sym("url"), !!sym("new_file"), !!sym("local_file_date")) %>%
-    rename(file = !!sym("new_file"))
+  if (isFALSE(skip_updates)) {
+    download_links <- download_links %>%
+      select(!!sym("year"), !!sym("url"), !!sym("new_file"), !!sym("local_file_date")) %>%
+      rename(file = !!sym("new_file"))
 
-  download_links <- download_links %>%
-    mutate(url = str_replace_all(url, "token=.*", "token=REPLACE_TOKEN"))
+    download_links <- download_links %>%
+      mutate(url = str_replace_all(url, "token=.*", "token=REPLACE_TOKEN"))
 
-  if (length(years_to_update) > 0) {
-    write_csv(download_links, paste0(raw_dir, "/downloaded-files-", Sys.Date(), ".csv"))
+    if (length(years_to_update) > 0) {
+      write_csv(download_links, paste0(raw_dir, "/downloaded-files-", Sys.Date(), ".csv"))
 
-    write_csv(
-      download_links %>% filter(!!sym("year") %in% years_to_update),
-      paste0(raw_dir, "/updated-files-", Sys.Date(), ".csv")
-    )
+      write_csv(
+        download_links %>% filter(!!sym("year") %in% years_to_update),
+        paste0(raw_dir, "/updated-files-", Sys.Date(), ".csv")
+      )
+    }
   }
 
   if (classification == "sitc") {
