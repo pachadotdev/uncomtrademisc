@@ -1,3 +1,13 @@
+# uncomtrademisc 2023.04.22
+
+* Allows to skip download and create the database directly.
+* Why? Because the legacy COMTRADE API does not work anymore.
+* Removes Arrow functions
+
+# uncomtrademisc 2023.03.17
+
+* Uses text and float8 to store UN COMTRADE data
+
 # uncomtrademisc 2023.03.07
 
 * Add requirements for Red Hat Linux

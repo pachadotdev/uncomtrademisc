@@ -618,7 +618,6 @@ update_rtas <- function(con, path = "rtas") {
 #' @param con SQL connection object
 #' @param path directory where the tidy data is
 #' @importFrom purrr pmap map_df
-#' @importFrom arrow schema int32 string
 #' @importFrom dplyr tbl
 #' @importFrom RPostgres dbSendQuery dbWriteTable
 #' @export

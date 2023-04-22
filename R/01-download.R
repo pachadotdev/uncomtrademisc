@@ -82,96 +82,6 @@ file_remove <- function(x) {
   try(file.remove(x))
 }
 
-#' @importFrom dplyr filter mutate mutate_if left_join group_by
-#' @importFrom stringr str_to_lower str_squish
-#' @importFrom arrow write_dataset
-#' @importFrom janitor clean_names
-#' @importFrom readr cols col_double col_integer col_character
-#' @importFrom purrr map
-#' @importFrom rlang sym
-convert_to_arrow <- function(t, yrs, raw_dir_parquet, raw_subdirs_parquet, raw_zip) {
-  messageline(yrs[t])
-
-  try(unlink(grep(paste0("/",yrs[t],"/"), raw_subdirs_parquet$file, value = T), recursive = T))
-
-  zip <- grep(paste0(yrs[t], "_freq-A"), raw_zip, value = T)
-
-  csv <- zip %>%
-    str_replace("/zip/", "/parquet/") %>%
-    str_replace("zip$", "csv")
-
-  extract(zip, raw_dir_parquet)
-
-  d <- read_csv(
-    csv,
-    col_types = cols(
-      Classification = col_character(),
-      Year = col_integer(),
-      Period = col_integer(),
-      `Period Desc.` = col_integer(),
-      `Aggregate Level` = col_integer(),
-      `Is Leaf Code` = col_integer(),
-      `Trade Flow Code` = col_integer(),
-      `Trade Flow` = col_character(),
-      `Reporter Code` = col_integer(),
-      Reporter = col_character(),
-      `Reporter ISO` = col_character(),
-      `Partner Code` = col_integer(),
-      Partner = col_character(),
-      `Partner ISO` = col_character(),
-      `Commodity Code` = col_character(),
-      Commodity = col_character(),
-      `Qty Unit Code` = col_integer(),
-      `Qty Unit` = col_character(),
-      Qty = col_double(),
-      `Netweight (kg)` = col_double(),
-      `Trade Value (US$)` = col_double(),
-      Flag = col_integer())
-  )
-
-  d <- d %>%
-    clean_names() %>%
-    rename(trade_value_usd = !!sym("trade_value_us")) %>%
-    mutate_if(is.character, function(x) { str_to_lower(str_squish(x)) }) %>%
-    mutate(
-      reporter_iso = unspecified(!!sym("reporter_iso")),
-      partner_iso = unspecified(!!sym("partner_iso")),
-      trade_flow = unspecified(!!sym("trade_flow"))
-    )
-
-  al <- sort(unique(d$aggregate_level))
-
-  tf <- sort(unique(d$trade_flow))
-
-  map(
-    al,
-    function(x) {
-      d2 <- d %>%
-        filter(!!sym("aggregate_level") == x)
-
-      gc()
-
-      if (nrow(d2) > 0) {
-        map(
-          tf,
-          function(x) {
-            d2 %>%
-              filter(!!sym("trade_flow") == x) %>%
-              group_by(!!sym("aggregate_level"), !!sym("trade_flow"), !!sym("year"), !!sym("reporter_iso")) %>%
-              write_dataset(raw_dir_parquet, hive_style = F)
-
-            gc()
-          }
-        )
-      }
-
-      rm(d2); gc()
-    }
-  )
-
-  file_remove(csv); rm(d); gc()
-}
-
 #' Connect to Local PostgreSQL
 #'
 #' Open a SQL connection to local PSQL server
@@ -317,30 +227,30 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
       # print(d2)
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
-        	commodity_code VARCHAR(6),
-        	commodity VARCHAR(300))", paste0(gsub("-", "_", raw_dir), "_commodities")))
+        	commodity_code text,
+        	commodity text)", paste0(gsub("-", "_", raw_dir), "_commodities")))
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
-        	country_iso VARCHAR(13),
-        	country_code INTEGER,
-        	country VARCHAR(100))", paste0(gsub("-", "_", raw_dir), "_countries")))
+        	country_iso text,
+        	country_code int4,
+        	country text)", paste0(gsub("-", "_", raw_dir), "_countries")))
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
-        	qty_unit_code INTEGER,
-        	qty_unit VARCHAR(100))", paste0(gsub("-", "_", raw_dir), "_units")))
+        	qty_unit_code int4,
+        	qty_unit text)", paste0(gsub("-", "_", raw_dir), "_units")))
 
       dbSendQuery(con, sprintf(
         "CREATE TABLE IF NOT EXISTS %s (
-        	year INTEGER,
-        	reporter_iso VARCHAR(13),
-        	partner_iso VARCHAR(13),
-        	reporter_code INTEGER,
-        	partner_code INTEGER,
-        	commodity_code VARCHAR(6),
-        	qty_unit_code INTEGER,
-        	qty NUMERIC,
-        	netweight_kg NUMERIC,
-        	trade_value_usd NUMERIC)", table_name))
+        	year int4,
+        	reporter_iso text,
+        	partner_iso text,
+        	reporter_code int4,
+        	partner_code int4,
+        	commodity_code text,
+        	qty_unit_code int4,
+        	qty float8,
+        	netweight_kg float8,
+        	trade_value_usd float8)", table_name))
 
       dbSendQuery(con, sprintf("DELETE FROM %s WHERE year=%s", table_name, yrs[t]))
 
@@ -450,8 +360,6 @@ create_indexes_postgres <- function(raw_dir) {
 #' @importFrom utils menu
 #' @importFrom rlang sym
 #'
-#' @param arrow Set to `FALSE` to just download the datasets without
-#'     converting to Apache Arrow.
 #' @param postgres Set to `FALSE` to just download the datasets without
 #'     converting to PostgreSQL
 #' @param token parameter for non-interactive calls, otherwise it shows a prompt
@@ -462,8 +370,8 @@ create_indexes_postgres <- function(raw_dir) {
 #' @param subdir parameter to download in a sub-directory such as `"finp"`, etc.
 #'
 #' @export
-data_downloading <- function(arrow = F, postgres = F, token = NULL, dataset = NULL, remove_old_files = NULL,
-                             subset_years = NULL, parallel = NULL, subdir = NULL) {
+data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_old_files = NULL,
+                             subset_years = NULL, parallel = NULL, subdir = NULL, skip_updates = F) {
   if (is.null(token)) { check_token() }
 
   # download ----
@@ -625,20 +533,22 @@ data_downloading <- function(arrow = F, postgres = F, token = NULL, dataset = NU
       rename(new_file = file)
   }
 
-  files_to_update <- download_links %>%
-    filter(!!sym("local_file_date") < !!sym("server_file_date"))
+  if (isFALSE(skip_updates)) {
+    files_to_update <- download_links %>%
+      filter(!!sym("local_file_date") < !!sym("server_file_date"))
 
-  files_to_update_2 <- download_links %>%
-    mutate(file_exists = file.exists(!!sym("new_file"))) %>%
-    filter(!!sym("file_exists") == FALSE)
+    files_to_update_2 <- download_links %>%
+      mutate(file_exists = file.exists(!!sym("new_file"))) %>%
+      filter(!!sym("file_exists") == FALSE)
 
-  files_to_update <- files_to_update %>%
-    bind_rows(files_to_update_2)
+    files_to_update <- files_to_update %>%
+      bind_rows(files_to_update_2)
 
-  years_to_update <- files_to_update$year
+    years_to_update <- files_to_update$year
 
-  if (length(years_to_update) > 0) {
-    download_files(download_links, parallel = parallel)
+    if (length(years_to_update) > 0) {
+      download_files(download_links, parallel = parallel)
+    }
   }
 
   if (remove_old_files == 1) {
@@ -671,8 +581,6 @@ data_downloading <- function(arrow = F, postgres = F, token = NULL, dataset = NU
     )
   }
 
-  # convert to arrow ----
-
   if (classification == "sitc") {
     aggregations <- 0:5
   } else {
@@ -684,37 +592,6 @@ data_downloading <- function(arrow = F, postgres = F, token = NULL, dataset = NU
     pattern = "\\.zip",
     full.names = T
   )
-
-  if (isTRUE(arrow)) {
-    # re-create any missing/updated arrow dataset
-    raw_subdirs_parquet <- expand.grid(
-      base_dir = raw_dir_parquet,
-      aggregations = aggregations,
-      flow = c("import", "export", "re-import", "re-export"),
-      year = years
-    ) %>%
-      mutate(
-        file = paste0(
-          !!sym("base_dir"),
-          "/", aggregations, "/",
-          !!sym("flow"), "/", !!sym("year")),
-        exists = file.exists(file)
-      )
-
-    update_years <- raw_subdirs_parquet %>%
-      group_by(!!sym("year")) %>%
-      summarise(exists = as.logical(max(!!sym("exists")))) %>%
-      filter(exists == FALSE | !!sym("year") %in% years_to_update) %>%
-      select(!!sym("year")) %>%
-      distinct() %>%
-      pull()
-
-    raw_zip <- grep(paste(paste0("ps-", update_years), collapse = "|"), raw_zip, value = TRUE)
-
-    if (any(update_years > 0)) {
-      lapply(seq_along(update_years), convert_to_arrow, yrs = update_years, raw_dir_parquet, raw_subdirs_parquet, raw_zip)
-    }
-  }
 
   # convert to postgres ----
 
