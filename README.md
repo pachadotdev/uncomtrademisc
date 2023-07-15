@@ -1,6 +1,16 @@
 # UN COMTRADE Misc Functions
-
 The goal of uncomtrademisc is to ease some data munging when using UN COMTRADE data.
+
+
+## 2023-07-15 update
+
+To get the downloads to work, we need to alter `/usr/lib/ssl/openssl.cnf` and add this under `[system_default_sect]`
+
+```
+Options = UnsafeLegacyRenegotiation
+```
+
+Then it is required to restart the computer and try again, this is because of the error `OpenSSL: error:0A000152:SSL routines::unsafe legacy renegotiation disabled` which is created by UN COMTRADE using an old SSL protocol.
 
 ## Installation
 
