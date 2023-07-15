@@ -5,13 +5,13 @@
   "description": "Download and tidy UN COMTRADE data, including wrappers to easily convert to Apache Arrow and rearrange the datasets under Tidy Data logic.",
   "name": "uncomtrademisc: Miscellaneous functions to download and tidy UN COMTRADE bulk data",
   "license": "Apache License 2",
-  "version": "2023.3.7",
+  "version": "2023.7.15",
   "programmingLanguage": {
     "@type": "ComputerLanguage",
     "name": "R",
     "url": "https://r-project.org"
   },
-  "runtimePlatform": "R version 4.2.2 (2022-10-31)",
+  "runtimePlatform": "R version 4.3.1 (2023-06-16)",
   "author": [
     {
       "@type": "Person",
@@ -62,18 +62,6 @@
   "softwareRequirements": {
     "1": {
       "@type": "SoftwareApplication",
-      "identifier": "arrow",
-      "name": "arrow",
-      "provider": {
-        "@id": "https://cran.r-project.org",
-        "@type": "Organization",
-        "name": "Comprehensive R Archive Network (CRAN)",
-        "url": "https://cran.r-project.org"
-      },
-      "sameAs": "https://CRAN.R-project.org/package=arrow"
-    },
-    "2": {
-      "@type": "SoftwareApplication",
       "identifier": "DBI",
       "name": "DBI",
       "provider": {
@@ -84,7 +72,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=DBI"
     },
-    "3": {
+    "2": {
       "@type": "SoftwareApplication",
       "identifier": "dplyr",
       "name": "dplyr",
@@ -96,7 +84,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=dplyr"
     },
-    "4": {
+    "3": {
       "@type": "SoftwareApplication",
       "identifier": "duckdb",
       "name": "duckdb",
@@ -108,7 +96,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=duckdb"
     },
-    "5": {
+    "4": {
       "@type": "SoftwareApplication",
       "identifier": "janitor",
       "name": "janitor",
@@ -120,7 +108,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=janitor"
     },
-    "6": {
+    "5": {
       "@type": "SoftwareApplication",
       "identifier": "jsonlite",
       "name": "jsonlite",
@@ -132,7 +120,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=jsonlite"
     },
-    "7": {
+    "6": {
       "@type": "SoftwareApplication",
       "identifier": "magrittr",
       "name": "magrittr",
@@ -144,7 +132,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=magrittr"
     },
-    "8": {
+    "7": {
       "@type": "SoftwareApplication",
       "identifier": "purrr",
       "name": "purrr",
@@ -156,7 +144,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=purrr"
     },
-    "9": {
+    "8": {
       "@type": "SoftwareApplication",
       "identifier": "readr",
       "name": "readr",
@@ -168,7 +156,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=readr"
     },
-    "10": {
+    "9": {
       "@type": "SoftwareApplication",
       "identifier": "rlang",
       "name": "rlang",
@@ -180,7 +168,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=rlang"
     },
-    "11": {
+    "10": {
       "@type": "SoftwareApplication",
       "identifier": "RPostgres",
       "name": "RPostgres",
@@ -192,7 +180,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=RPostgres"
     },
-    "12": {
+    "11": {
       "@type": "SoftwareApplication",
       "identifier": "stringr",
       "name": "stringr",
@@ -204,7 +192,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=stringr"
     },
-    "13": {
+    "12": {
       "@type": "SoftwareApplication",
       "identifier": "tidyr",
       "name": "tidyr",
@@ -216,7 +204,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=tidyr"
     },
-    "14": {
+    "13": {
       "@type": "SoftwareApplication",
       "identifier": "tradestatistics",
       "name": "tradestatistics",
@@ -228,7 +216,7 @@
       },
       "sameAs": "https://CRAN.R-project.org/package=tradestatistics"
     },
-    "15": {
+    "14": {
       "@type": "SoftwareApplication",
       "identifier": "R",
       "name": "R",
@@ -236,5 +224,9 @@
     },
     "SystemRequirements": "parallel: parallel (deb), 7z: p7zip-full (deb), p7zip-plugins (rpm)"
   },
-  "fileSize": "262.556KB"
+  "fileSize": "242.198KB",
+  "codeRepository": "https://github.com/pachadotdev/uncomtrademisc",
+  "releaseNotes": "https://github.com/pachadotdev/uncomtrademisc/blob/master/NEWS.md",
+  "readme": "https://github.com/pachadotdev/uncomtrademisc/blob/main/README.md",
+  "keywords": ["gravity", "r", "trade"]
 }

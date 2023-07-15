@@ -393,7 +393,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   }
 
   if (is.null(subset_years)) {
-    subset_years <- readline(prompt = "Years to download (i.e. `2000:2020`, hit enter to download all available data): ")
+    subset_years <- readline(prompt = "Years to download (i.e. `2000:2021`, hit enter to download all available data): ")
     subset_years <- as.numeric(unlist(strsplit(subset_years, ":")))
   }
 
@@ -446,7 +446,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     `9` = "S4"
   )
 
-  max_year <- 2020
+  max_year <- 2021
 
   years <- revision2:max_year
   if(length(subset_years) > 0) {
@@ -490,12 +490,26 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   )
 
   if (isFALSE(skip_updates)) {
-    files <- fromJSON(sprintf(
-      "https://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&px=%s&token=%s",
+    my_temp_json <- "links_temp.json"
+
+    files_url <- sprintf(
+      "http://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&px=%s&token=%s",
       classification2,
-      Sys.getenv("COMTRADE_TOKEN"))) %>%
+      Sys.getenv("COMTRADE_TOKEN"))
+
+    # SSL error
+    # download.file(files_url, my_temp_json, method = "wget")
+
+    # use system to download with wget --no-check-certificate
+    system(
+      paste("wget -O", my_temp_json, "--no-check-certificate", files_url)
+    )
+
+    files <- fromJSON(my_temp_json) %>%
       filter(!!sym("ps") %in% years) %>%
       arrange(!!sym("ps"))
+
+    unlink(my_temp_json)
   }
 
   if (exists("old_download_links") & isFALSE(skip_updates)) {
