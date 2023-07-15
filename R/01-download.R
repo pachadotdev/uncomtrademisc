@@ -498,11 +498,11 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
       Sys.getenv("COMTRADE_TOKEN"))
 
     # SSL error
-    # download.file(files_url, my_temp_json, method = "wget")
+    # download.file(files_url, download_links_json, method = "wget")
 
     # use system to download with wget --no-check-certificate
     system(
-      paste("wget -O", my_temp_json, "--no-check-certificate", files_url)
+      paste("wget -O", download_links_json, "--no-check-certificate", files_url)
     )
   }
 
