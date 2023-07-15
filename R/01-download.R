@@ -354,7 +354,7 @@ create_indexes_postgres <- function(raw_dir) {
 #' COMPLETE DESC...
 #'
 #' @importFrom jsonlite fromJSON
-#' @importFrom dplyr select arrange pull rename tibble bind_rows distinct group_by summarise
+#' @importFrom dplyr select arrange pull rename tibble bind_rows distinct group_by summarise filter
 #' @importFrom readr read_csv write_csv
 #' @importFrom stringr str_replace_all
 #' @importFrom utils menu
@@ -490,7 +490,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   )
 
   if (isFALSE(skip_updates)) {
-    my_temp_json <- "links_temp.json"
+    download_links_json <- "download_links.json"
 
     files_url <- sprintf(
       "http://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&px=%s&token=%s",
@@ -504,13 +504,17 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     system(
       paste("wget -O", my_temp_json, "--no-check-certificate", files_url)
     )
-
-    files <- fromJSON(my_temp_json) %>%
-      filter(!!sym("ps") %in% years) %>%
-      arrange(!!sym("ps"))
-
-    unlink(my_temp_json)
   }
+
+  files <- fromJSON(download_links_json) %>%
+    filter(
+      !!sym("ps") %in% years,
+      grepl("r-ALL", name),
+      grepl(paste0("px-", classification2), name)
+    ) %>%
+    arrange(!!sym("ps")) %>%
+    group_by(!!sym("ps")) %>%
+    filter(!!sym("publicationDate") == max(!!sym("publicationDate")))
 
   if (exists("old_download_links") & isFALSE(skip_updates)) {
     download_links <- download_links %>%
