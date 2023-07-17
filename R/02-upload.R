@@ -1,18 +1,3 @@
-#' Connect to Remote PostgreSQL
-#'
-#' Open a SQL connection to tradestatistics PSQL server
-#'
-#' @export
-con_tradestatistics <- function() {
-  RPostgres::dbConnect(
-    RPostgres::Postgres(),
-    host = Sys.getenv("TRADESTATISTICS_SQL_HOST"),
-    dbname = Sys.getenv("TRADESTATISTICS_SQL_DB"),
-    user = Sys.getenv("TRADESTATISTICS_SQL_USR"),
-    password = Sys.getenv("TRADESTATISTICS_SQL_PWD")
-  )
-}
-
 #' Connect to Local PostgreSQL
 #'
 #' Open a SQL connection to local PSQL server
@@ -43,22 +28,6 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
   messageline(yrs[t])
 
   con <- con_local()
-
-  # tables <- dbListTables(con)
-  # tables <- grep(paste(gsub("-", "_", raw_dir), "tf_import_al_0", sep = "_"),
-  #                tables, value = T)
-  # rows_in_db <- rep(NA, length(tables))
-  # for (i in seq_along(tables)) {
-  #   rows_in_db[i] <- as.numeric(dbGetQuery(con, sprintf("SELECT COUNT(year) as year FROM %s WHERE year = %s", tables[[i]], yrs[t])))
-  # }
-  #
-  # rows_in_db <- min(rows_in_db)
-  # if (is.infinite(rows_in_db)) { rows_in_db <- 0 }
-  #
-  # if ((!yrs[t] %in% years_to_update) | (rows_in_db > 0)) {
-  #   dbDisconnect(con)
-  #   return(TRUE)
-  # }
 
   zip <- grep(paste0(yrs[t], "_freq-A"), raw_zip, value = T)
 
@@ -106,7 +75,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
 
   d2 <- d2 %>%
     ungroup() %>%
-    select(data) %>%
+    select(!!sym("data")) %>%
     pull()
 
   names(d2) <- tfs

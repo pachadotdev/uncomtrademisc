@@ -58,18 +58,6 @@ download_files <- function(download_links, parallel) {
   }
 }
 
-#' @importFrom stringr str_replace
-extract <- function(x, y) {
-  if (file.exists(str_replace(x, "zip", "csv"))) {
-    messageline()
-    message(paste(x, "already unzipped. Skipping."))
-  } else {
-    messageline()
-    message(paste("Unzipping", x))
-    system(sprintf("7z e -aos %s -oc:%s", x, y))
-  }
-}
-
 #' @importFrom dplyr case_when
 unspecified <- function(x) {
   case_when(
@@ -244,21 +232,22 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     file = NA
   )
 
-  if (isFALSE(skip_updates)) {
-    download_links_json <- "download_links.json"
+  files_url <- sprintf(
+    "https://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&token=%s",
+    Sys.getenv("COMTRADE_TOKEN"))
 
-    files_url <- sprintf(
-      "https://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&px=%s&token=%s",
-      classification2,
-      Sys.getenv("COMTRADE_TOKEN"))
+  download_links_json <- "download_links.json"
 
+  if (!file.exists(download_links_json)) {
     # SSL error
     # download.file(files_url, download_links_json, method = "wget")
 
     # use system to download with wget --no-check-certificate
-    system(
-      paste("wget -O", download_links_json, "--no-check-certificate", files_url)
-    )
+    if (!file.exists(download_links_json)) {
+      system(
+        paste("wget -O", download_links_json, "--no-check-certificate", files_url)
+      )
+    }
   }
 
   files <- fromJSON(download_links_json) %>%

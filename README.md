@@ -1,6 +1,11 @@
 # UN COMTRADE Misc Functions
+
 The goal of uncomtrademisc is to ease some data munging when using UN COMTRADE data.
 
+## 2023-07-17 update
+
+The package will be unmaintained by the end of the month. A new package will be
+created to work with the new UN COMTRADE Plus.
 
 ## 2023-07-15 update
 
