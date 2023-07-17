@@ -1,7 +1,7 @@
 # Internal functions ----
 
 messageline <- function(txt = NULL, width = 80) {
-  if(is.null(txt)) {
+  if (is.null(txt)) {
     message(rep("-", width))
   } else {
     message(txt, " ", rep("-", width - nchar(txt) - 1))
@@ -21,7 +21,7 @@ check_token <- function() {
 
 #' @importFrom utils download.file
 download_files <- function(download_links, parallel) {
-  if (Sys.info()[['sysname']] != "Windows") {
+  if (Sys.info()[["sysname"]] != "Windows") {
     if (isTRUE(parallel)) {
       messageline("Downloading files in parallel...")
       base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=180 -O %s %s"
@@ -30,31 +30,35 @@ download_files <- function(download_links, parallel) {
       unlink("commands.txt")
     } else {
       messageline("Downloading files sequentially...")
-      lapply(seq_along(download_links$url),
-             function(x) {
-               base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=180 -O %s %s"
-               base_command <- sprintf(base_command, download_links$new_file[[x]], download_links$url[[x]])
-               if (file.exists(download_links$new_file[[x]])) {
-                 return(TRUE)
-               } else {
-                 system(base_command)
-               }
-             })
+      lapply(
+        seq_along(download_links$url),
+        function(x) {
+          base_command <- "wget --continue --retry-connrefused --no-http-keep-alive --tries=0 --timeout=180 -O %s %s"
+          base_command <- sprintf(base_command, download_links$new_file[[x]], download_links$url[[x]])
+          if (file.exists(download_links$new_file[[x]])) {
+            return(TRUE)
+          } else {
+            system(base_command)
+          }
+        }
+      )
     }
   } else {
     messageline("Windows detected, downloading files sequentially...")
-    lapply(seq_along(download_links$url),
-           function(x) {
-             if (file.exists(download_links$new_file[[x]])) {
-               return(TRUE)
-             } else {
-               download.file(
-                 url = download_links$url[[x]],
-                 destfile = download_links$new_file[[x]],
-                 method = "auto"
-               )
-             }
-           })
+    lapply(
+      seq_along(download_links$url),
+      function(x) {
+        if (file.exists(download_links$new_file[[x]])) {
+          return(TRUE)
+        } else {
+          download.file(
+            url = download_links$url[[x]],
+            destfile = download_links$new_file[[x]],
+            method = "auto"
+          )
+        }
+      }
+    )
   }
 }
 
@@ -115,13 +119,17 @@ create_indexes_postgres <- function(raw_dir) {
 #' @export
 data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_old_files = NULL,
                              subset_years = NULL, parallel = NULL, subdir = NULL, skip_updates = F) {
-  if (is.null(token)) { check_token() }
+  if (is.null(token)) {
+    check_token()
+  }
 
   # download ----
   if (is.null(dataset)) {
     dataset <- menu(
-      c("HS rev 1992", "HS rev 1996", "HS rev 2002", "HS rev 2007", "HS rev 2012",
-        "SITC rev 1", "SITC rev 2", "SITC rev 3", "SITC rev 4"),
+      c(
+        "HS rev 1992", "HS rev 1996", "HS rev 2002", "HS rev 2007", "HS rev 2012",
+        "SITC rev 1", "SITC rev 2", "SITC rev 3", "SITC rev 4"
+      ),
       title = "Select dataset:",
       graphics = F
     )
@@ -150,8 +158,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
 
   classification <- ifelse(dataset < 6, "hs", "sitc")
 
-  revision <- switch (
-    dataset,
+  revision <- switch(dataset,
     `1` = 1992,
     `2` = 1996,
     `3` = 2002,
@@ -163,8 +170,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     `9` = 4
   )
 
-  revision2 <- switch (
-    dataset,
+  revision2 <- switch(dataset,
     `1` = 1988,
     `2` = 1996,
     `3` = 2002,
@@ -176,8 +182,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     `9` = 2007
   )
 
-  classification2 <- switch (
-    dataset,
+  classification2 <- switch(dataset,
     `1` = "H0",
     `2` = "H1",
     `3` = "H2",
@@ -192,7 +197,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   max_year <- 2021
 
   years <- revision2:max_year
-  if(length(subset_years) > 0) {
+  if (length(subset_years) > 0) {
     years <- years[years >= min(subset_years) & years <= max(subset_years)]
   }
 
@@ -208,7 +213,9 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
 
   try(
     old_file <- max(
-      list.files(raw_dir, pattern = "downloaded-files.*csv", full.names = T), na.rm = T)
+      list.files(raw_dir, pattern = "downloaded-files.*csv", full.names = T),
+      na.rm = T
+    )
   )
 
   if (isTRUE(nchar(old_file) > 0)) {
@@ -234,23 +241,22 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
 
   files_url <- sprintf(
     "https://comtrade.un.org/api/refs/da/bulk?freq=A&r=ALL&token=%s",
-    Sys.getenv("COMTRADE_TOKEN"))
+    Sys.getenv("COMTRADE_TOKEN")
+  )
 
-  download_links_json <- "download_links.json"
+  finp <- "download_links.json"
 
-  if (!file.exists(download_links_json)) {
+  if (!file.exists(finp)) {
     # SSL error
     # download.file(files_url, download_links_json, method = "wget")
 
     # use system to download with wget --no-check-certificate
-    if (!file.exists(download_links_json)) {
-      system(
-        paste("wget -O", download_links_json, "--no-check-certificate", files_url)
-      )
-    }
+    system(
+      paste("wget -O", finp, "--no-check-certificate", files_url)
+    )
   }
 
-  files <- fromJSON(download_links_json) %>%
+  files <- fromJSON(finp) %>%
     filter(
       !!sym("ps") %in% years,
       grepl("r-ALL", !!sym("name")),
@@ -280,19 +286,17 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
       )
   } else {
     if (isFALSE(skip_updates)) {
-    download_links <- download_links %>%
-      mutate(
-        file = paste0(raw_dir_zip, "/", files$name),
+      download_links <- download_links %>%
+        mutate(
+          file = paste0(raw_dir_zip, "/", files$name),
+          server_file_date = as.Date(gsub("_fmt.*", "", gsub(".*pub-", "", file)), "%Y%m%d"),
 
-        server_file_date = as.Date(gsub("_fmt.*", "", gsub(".*pub-", "", file)), "%Y%m%d"),
-
-        # trick in case there are no old files
-        old_file = NA,
-
-        local_file_date = !!sym("server_file_date"),
-        server_file_date = as.Date(!!sym("server_file_date") + 1, origin = "1970-01-01")
-      ) %>%
-      rename(new_file = file)
+          # trick in case there are no old files
+          old_file = NA,
+          local_file_date = !!sym("server_file_date"),
+          server_file_date = as.Date(!!sym("server_file_date") + 1, origin = "1970-01-01")
+        ) %>%
+        rename(new_file = file)
     } else {
       download_links <- old_download_links
     }
@@ -318,8 +322,9 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
 
   if (remove_old_files == 1) {
     files_to_remove <- list.files(raw_dir_zip,
-                                  pattern = paste(paste0("ps-",years), collapse = "|"),
-                                  full.names = T)
+      pattern = paste(paste0("ps-", years), collapse = "|"),
+      full.names = T
+    )
     files_to_remove <- data.frame(
       file = files_to_remove,
       year = gsub("_freq.*", "", gsub(".*_ps-", "", files_to_remove))
@@ -351,7 +356,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   if (classification == "sitc") {
     aggregations <- 0:5
   } else {
-    aggregations <- c(0,2,4,6)
+    aggregations <- c(0, 2, 4, 6)
   }
 
   raw_zip <- list.files(

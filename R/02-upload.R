@@ -57,10 +57,13 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
       Qty = col_double(),
       `Netweight (kg)` = col_double(),
       `Trade Value (US$)` = col_double(),
-      Flag = col_skip())
+      Flag = col_skip()
+    )
   ) %>%
     clean_names() %>%
-    mutate_if(is.character, function(x) { str_to_lower(str_squish(x)) }) %>%
+    mutate_if(is.character, function(x) {
+      str_to_lower(str_squish(x))
+    }) %>%
     filter(
       !!sym("aggregate_level") == al
     )
@@ -128,7 +131,8 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
         	qty_unit_code int4,
         	qty float8,
         	netweight_kg float8,
-        	trade_value_usd float8)", table_name))
+        	trade_value_usd float8)", table_name
+      ))
 
       dbSendQuery(con, sprintf("DELETE FROM %s WHERE year=%s", table_name, yrs[t]))
 
@@ -206,5 +210,6 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
   )
 
   dbDisconnect(con)
-  rm(d2); gc()
+  rm(d2)
+  gc()
 }
