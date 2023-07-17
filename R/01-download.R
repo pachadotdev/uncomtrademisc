@@ -376,7 +376,7 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   years <- rev(years)
 
   if (isTRUE(postgres)) {
-    lapply(seq_along(years), convert_to_postgres, yrs = years, raw_dir, raw_zip, years)
+    lapply(seq_along(years), convert_to_postgres, yrs = years, raw_dir, raw_zip, years, classification)
     create_indexes_postgres(raw_dir)
   }
 }

@@ -39,7 +39,7 @@ con_local <- function() {
 #' @importFrom purrr map
 #' @importFrom tidyr nest unnest
 #' @importFrom rlang sym
-convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
+convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, classification) {
   messageline(yrs[t])
 
   con <- con_local()
@@ -62,46 +62,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update) {
 
   zip <- grep(paste0(yrs[t], "_freq-A"), raw_zip, value = T)
 
-  # d <- read_csv(
-  #   zip,
-  #   col_types = cols(
-  #     Classification = col_skip(),
-  #     Year = col_skip(),
-  #     Period = col_skip(),
-  #     `Period Desc.` = col_skip(),
-  #     `Aggregate Level` = col_integer(),
-  #     `Is Leaf Code` = col_skip(),
-  #     `Trade Flow Code` = col_skip(),
-  #     `Trade Flow` = col_character(),
-  #     `Reporter Code` = col_skip(),
-  #     Reporter = col_skip(),
-  #     `Reporter ISO` = col_skip(),
-  #     `Partner Code` = col_skip(),
-  #     Partner = col_skip(),
-  #     `Partner ISO` = col_skip(),
-  #     `Commodity Code` = col_skip(),
-  #     Commodity = col_skip(),
-  #     `Qty Unit Code` = col_skip(),
-  #     `Qty Unit` = col_skip(),
-  #     Qty = col_skip(),
-  #     `Netweight (kg)` = col_skip(),
-  #     `Trade Value (US$)` = col_skip(),
-  #     Flag = col_skip())
-  # ) %>%
-  #   clean_names() %>%
-  #   mutate_if(is.character, function(x) { str_to_lower(str_squish(x)) }) %>%
-  #   distinct(!!sym("trade_flow"), !!sym("aggregate_level"))
-  #
-  # d <- d %>%
-  #   filter(!!sym("aggregate_level") %in% 5:6)
-
-  # d = data.frame(
-  #   stringsAsFactors = FALSE,
-  #   trade_flow = c("import", "export", "re-import", "re-export"),
-  #   aggregate_level = c(6L, 6L, 6L, 6L)
-  # )
-
-  al <- 6
+  al <- ifelse(classification == "hs", 6L, 5L)
 
   d2 <- read_csv(
     zip,
