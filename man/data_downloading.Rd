@@ -30,6 +30,8 @@ converting to PostgreSQL}
 \item{parallel}{parameter for non-interactive calls, otherwise it shows a prompt}
 
 \item{subdir}{parameter to download in a sub-directory such as `"finp"`, etc.}
+
+\item{skip_updates}{parameter to skip checking for updates}
 }
 \description{
 COMPLETE DESC...
