@@ -14,7 +14,7 @@ con_local <- function() {
   )
 }
 
-#' @importFrom dplyr filter mutate mutate_if left_join group_by distinct arrange ungroup pull
+#' @importFrom dplyr filter mutate mutate_if left_join group_by distinct arrange ungroup pull row_number
 #' @importFrom stringr str_to_lower str_squish
 #' @importFrom RPostgres dbSendQuery dbWriteTable dbDisconnect
 #'     dbListTables
@@ -194,12 +194,33 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
       d2[[tf]] <- d2[[tf]] %>%
         select(-!!sym("qty_unit"))
 
-      dbWriteTable(
-        con,
-        table_name,
-        d2[[tf]],
-        append = TRUE,
-        overwrite = FALSE
+      # partition into smaller sub-sub-tables
+
+      N <- 1000000
+
+      d2[[tf]] <- d2[[tf]] %>%
+        mutate(p = floor(row_number() / N) + 1) %>% 
+        group_by(!!sym("p")) %>% 
+        nest() %>% 
+        ungroup() %>% 
+        select(!!sym("data")) %>% 
+        pull()
+
+      # dbWriteTable(
+      #   con,
+      #   table_name,
+      #   d2[[tf]],
+      #   append = TRUE,
+      #   overwrite = FALSE
+      # )
+
+      map(
+        seq_along(d2[[tf]]),
+        function(x) {
+          message(sprintf("Writing fragment %s of %s", x, length(d2[[tf]])))
+          dbWriteTable(con, "flights", d2[[tf]][[x]],
+            append = TRUE, overwrite = FALSE)
+        }
       )
 
       # here we remove the sub-table to free resources
