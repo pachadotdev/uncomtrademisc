@@ -21,6 +21,7 @@ con_local <- function() {
 #' @importFrom DBI dbGetQuery dbReadTable
 #' @importFrom janitor clean_names
 #' @importFrom readr cols col_double col_integer col_character col_skip
+#' @importFrom archive archive_extract
 #' @importFrom purrr map
 #' @importFrom tidyr nest unnest
 #' @importFrom rlang sym
@@ -30,11 +31,21 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
   con <- con_local()
 
   zip <- grep(paste0(yrs[t], "_freq-A"), raw_zip, value = T)
+  # zip <- "~/github/un_escap/uncomtrade-full-download/hs-rev2007/zip/type-C_r-ALL_ps-2018_freq-A_px-H3_pub-20230323_fmt-csv_ex-20230324.zip"
 
   al <- ifelse(classification == "hs", 6L, 5L)
+  # al <- 6
+
+  zout <- "trade"
+  if (dir.exists(zout)) try(unlink(zout, recursive = TRUE))
+  try(dir.create(zout))
+
+  archive_extract(zip, dir = zout)
+
+  csv <- list.files(zout, pattern = ".csv$", full.names = TRUE)
 
   d2 <- read_csv(
-    zip,
+    csv,
     col_types = cols(
       Classification = col_skip(),
       Year = col_integer(),
@@ -59,18 +70,26 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
       `Trade Value (US$)` = col_double(),
       Flag = col_skip()
     )
-  ) %>%
-    clean_names() %>%
-    mutate_if(is.character, function(x) {
-      str_to_lower(str_squish(x))
-    }) %>%
+  )
+
+  d2 <- d2 %>%
+    clean_names()
+
+  d2 <- d2 %>%
     filter(
       !!sym("aggregate_level") == al
     )
 
   d2 <- d2 %>%
+    mutate_if(is.character, function(x) {
+      str_to_lower(str_squish(x))
+    })
+
+  d2 <- d2 %>%
     group_by(!!sym("trade_flow")) %>%
-    nest() %>%
+    nest()
+
+  d2 <- d2 %>%
     ungroup() %>%
     mutate(trade_flow = str_to_lower(str_squish(!!sym("trade_flow"))))
 
@@ -88,13 +107,23 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
   map(
     tfs,
     function(tf) {
+      saveRDS(d2[[tf]], paste0("trade/", tf, ".rds"))
+    }
+  )
+
+  rm(d2)
+  try(file.remove(csv))
+
+  map(
+    tfs,
+    function(tf) {
       # tf <- tfs[1]
       # al <- 6
       table_name <- paste(gsub("-", "_", raw_dir), "tf", gsub("-", "_", tf), "al", al, sep = "_")
 
       message(table_name)
 
-      d2[[tf]] <- d2[[tf]] %>%
+      d3 <- readRDS(paste0("trade/", tf, ".rds")) %>%
         mutate(
           reporter_iso = unspecified(!!sym("reporter_iso")),
           partner_iso = unspecified(!!sym("partner_iso"))
@@ -102,7 +131,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
         rename(trade_value_usd = !!sym("trade_value_us")) %>%
         select(-!!sym("aggregate_level"))
 
-      d2[[tf]] <- d2[[tf]] %>%
+      d3 <- d3 %>%
         arrange(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"))
 
       # print(d2)
@@ -136,7 +165,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
 
       dbSendQuery(con, sprintf("DELETE FROM %s WHERE year=%s", table_name, yrs[t]))
 
-      commodities <- d2[[tf]] %>%
+      commodities <- d3 %>%
         select(!!sym("commodity_code"), !!sym("commodity")) %>%
         distinct() %>%
         bind_rows(dbReadTable(con, paste0(gsub("-", "_", raw_dir), "_commodities"))) %>%
@@ -147,10 +176,10 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
 
       rm(commodities)
 
-      d2[[tf]] <- d2[[tf]] %>%
+      d3 <- d3 %>%
         select(-!!sym("commodity"))
 
-      countries <- d2[[tf]] %>%
+      countries <- d3 %>%
         select(!!sym("reporter_iso"), !!sym("reporter_code"), !!sym("reporter")) %>%
         distinct() %>%
         rename(
@@ -159,7 +188,7 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
           country = !!sym("reporter")
         ) %>%
         bind_rows(
-          d2[[tf]] %>%
+          d3 %>%
             select(!!sym("partner_iso"), !!sym("partner_code"), !!sym("partner")) %>%
             distinct() %>%
             rename(
@@ -177,10 +206,10 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
 
       rm(countries)
 
-      d2[[tf]] <- d2[[tf]] %>%
+      d3 <- d3 %>%
         select(-!!sym("reporter"), -!!sym("partner"))
 
-      units <- d2[[tf]] %>%
+      units <- d3 %>%
         select(!!sym("qty_unit_code"), !!sym("qty_unit")) %>%
         distinct() %>%
         bind_rows(dbReadTable(con, paste0(gsub("-", "_", raw_dir), "_units"))) %>%
@@ -191,14 +220,14 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
 
       rm(units)
 
-      d2[[tf]] <- d2[[tf]] %>%
+      d3 <- d3 %>%
         select(-!!sym("qty_unit"))
 
       # partition into smaller sub-sub-tables
 
       N <- 1000000
 
-      d2[[tf]] <- d2[[tf]] %>%
+      d3 <- d3 %>%
         mutate(p = floor(row_number() / N) + 1) %>% 
         group_by(!!sym("p")) %>% 
         nest() %>% 
@@ -209,28 +238,29 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
       # dbWriteTable(
       #   con,
       #   table_name,
-      #   d2[[tf]],
+      #   d3,
       #   append = TRUE,
       #   overwrite = FALSE
       # )
 
       map(
-        seq_along(d2[[tf]]),
+        seq_along(d3),
         function(x) {
-          message(sprintf("Writing fragment %s of %s", x, length(d2[[tf]])))
-          dbWriteTable(con, "flights", d2[[tf]][[x]],
+          message(sprintf("Writing fragment %s of %s", x, length(d3)))
+          dbWriteTable(con, table_name, d3[[x]],
             append = TRUE, overwrite = FALSE)
         }
       )
 
       # here we remove the sub-table to free resources
-      d2[[tf]] <- NULL
+      # d3 <- NULL
+      try(file.remove(paste0("trade/", tf, ".rds")))
 
       gc()
     }
   )
 
   dbDisconnect(con)
-  rm(d2)
   gc()
+  unlink(zout, recursive = TRUE)
 }

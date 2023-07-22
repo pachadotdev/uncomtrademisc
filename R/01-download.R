@@ -76,7 +76,7 @@ file_remove <- function(x) {
 
 #' @importFrom RPostgres Postgres dbConnect dbSendQuery dbListTables dbDisconnect
 create_indexes_postgres <- function(raw_dir) {
-  message("rebuilding indexes...")
+  message("creating indexes...")
   con <- con_local()
   tables <- dbListTables(con)
   tables <- grep(gsub("-", "_", raw_dir), tables, value = T)
@@ -84,10 +84,37 @@ create_indexes_postgres <- function(raw_dir) {
 
   for (table_name in tables) {
     message(table_name)
+
+    # drop primary indexes
     dbSendQuery(con, sprintf("DROP INDEX IF EXISTS %s_year", table_name))
-    dbSendQuery(con, sprintf("DROP INDEX IF EXISTS %s_reporter_iso", table_name))
+    dbSendQuery(con, sprintf("DROP INDEX IF EXISTS %s_reporter", table_name))
+    dbSendQuery(con, sprintf("DROP INDEX IF EXISTS %s_partner", table_name))
+
+    # create primary indexes
     dbSendQuery(con, sprintf("CREATE INDEX %s_year ON %s (year)", table_name, table_name))
-    dbSendQuery(con, sprintf("CREATE INDEX %s_reporter_iso ON %s (reporter_iso)", table_name, table_name))
+    dbSendQuery(con, sprintf("CREATE INDEX %s_reporter ON %s (reporter_iso)", table_name, table_name))
+    dbSendQuery(con, sprintf("CREATE INDEX %s_partner ON %s (partner_iso)", table_name, table_name))
+
+    coun <- gsub("tf_.*", "countries", table_name)
+    comm <- gsub("tf_.*", "commodities", table_name)
+    unit <- gsub("tf_.*", "units", table_name)
+    rev <- gsub("_tf.*", "", table_name)
+
+    # drop foreign keys
+    dbSendQuery(con, sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s_country", table_name, rev))
+    dbSendQuery(con, sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s_commodity", table_name, rev))
+    dbSendQuery(con, sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s_unit", table_name, rev))
+
+    # reference keys
+    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX %s_country ON %s (country_iso, country_code)", rev, coun))
+    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX %s_commodity ON %s (commodity_code)", rev, comm))
+    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX %s_unit ON %s (qty_unit_code)", rev, unit))
+
+    # create foreign keys
+    dbSendQuery(con, sprintf("ALTER TABLE %s ADD FOREIGN KEY (reporter_iso, reporter_code) REFERENCES %s (country_iso, country_code)", table_name, coun))
+    dbSendQuery(con, sprintf("ALTER TABLE %s ADD FOREIGN KEY (partner_iso, partner_code) REFERENCES %s (country_iso, country_code)", table_name, coun))
+    dbSendQuery(con, sprintf("ALTER TABLE %s ADD FOREIGN KEY (commodity_code) REFERENCES %s (commodity_code)", table_name, comm))
+    dbSendQuery(con, sprintf("ALTER TABLE %s ADD FOREIGN KEY (qty_unit_code) REFERENCES %s (qty_unit_code)", table_name, unit))
   }
 
   dbDisconnect(con)
