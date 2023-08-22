@@ -1,7 +1,17 @@
+# uncomtrademisc 2023.08.21
+
+* adds EB02 download option
+
+# uncomtrademisc 2023.08.02
+
+* Adds SITC rev 3-4 and BEC download option
+* Updated COMTRADE links to use the API
+* Uses archive (pkg) instead of 7zip (external)
+* limits just to COMTRADE data (no gravity, no GDP, no RTAs)
+
 # uncomtrademisc 2023.04.22
 
 * Allows to skip download and create the database directly.
-* Why? Because the legacy COMTRADE API does not work anymore.
 * Removes Arrow functions
 
 # uncomtrademisc 2023.03.17

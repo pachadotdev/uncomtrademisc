@@ -106,9 +106,9 @@ create_indexes_postgres <- function(raw_dir) {
     dbSendQuery(con, sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s_unit", table_name, rev))
 
     # reference keys
-    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX %s_country ON %s (country_iso, country_code)", rev, coun))
-    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX %s_commodity ON %s (commodity_code)", rev, comm))
-    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX %s_unit ON %s (qty_unit_code)", rev, unit))
+    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s_country ON %s (country_iso, country_code)", rev, coun))
+    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s_commodity ON %s (commodity_code)", rev, comm))
+    dbSendQuery(con, sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s_unit ON %s (qty_unit_code)", rev, unit))
 
     # create foreign keys
     dbSendQuery(con, sprintf("ALTER TABLE %s ADD FOREIGN KEY (reporter_iso, reporter_code) REFERENCES %s (country_iso, country_code)", table_name, coun))
@@ -154,8 +154,9 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   if (is.null(dataset)) {
     dataset <- menu(
       c(
-        "HS rev 1992", "HS rev 1996", "HS rev 2002", "HS rev 2007", "HS rev 2012",
-        "SITC rev 1", "SITC rev 2", "SITC rev 3", "SITC rev 4"
+        "HS rev 1992", "HS rev 1996", "HS rev 2002", "HS rev 2007",
+        "HS rev 2012", "HS rev 2017",
+        "SITC rev 1", "SITC rev 2", "SITC rev 3", "SITC rev 4", "EB 02"
       ),
       title = "Select dataset:",
       graphics = F
@@ -183,7 +184,10 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     )
   }
 
-  classification <- ifelse(dataset < 6, "hs", "sitc")
+  classification <- ifelse(dataset < 7, "hs",
+    ifelse(dataset < 11, "sitc",
+      ifelse(dataset == 11, "bec", "eb")
+    ))
 
   revision <- switch(dataset,
     `1` = 1992,
@@ -191,10 +195,13 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     `3` = 2002,
     `4` = 2007,
     `5` = 2012,
-    `6` = 1,
-    `7` = 2,
-    `8` = 3,
-    `9` = 4
+    `6` = 2017,
+    `7` = 1,
+    `8` = 2,
+    `9` = 3,
+    `10` = 4,
+    `11` = "",
+    `12` = "02"
   )
 
   revision2 <- switch(dataset,
@@ -203,11 +210,18 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     `3` = 2002,
     `4` = 2007,
     `5` = 2012,
-    `6` = 1962,
-    `7` = 1976,
-    `8` = 1988,
-    `9` = 2007
+    `6` = 2017,
+    `7` = 1962,
+    `8` = 1976,
+    `9` = 1988,
+    `10` = 2007,
+    `11` = 1993,
+    `12` = 2000
   )
+
+  if (dataset == 11) {
+    message("Unfortunately, BEC data for 1991-1992 is missing in the API.")
+  }
 
   classification2 <- switch(dataset,
     `1` = "H0",
@@ -215,10 +229,13 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     `3` = "H2",
     `4` = "H3",
     `5` = "H4",
-    `6` = "S1",
-    `7` = "S2",
-    `8` = "S3",
-    `9` = "S4"
+    `6` = "H5",
+    `7` = "S1",
+    `8` = "S2",
+    `9` = "S3",
+    `10` = "S4",
+    `11` = "BEC",
+    `12` = "EB02"
   )
 
   max_year <- 2021
@@ -228,11 +245,16 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
     years <- years[years >= min(subset_years) & years <= max(subset_years)]
   }
 
-  if (is.null(subdir)) {
-    raw_dir <- sprintf("%s-rev%s", classification, revision)
-  } else {
-    raw_dir <- paste0(subdir, "/", sprintf("%s-rev%s", classification, revision))
+  raw_dir <- sprintf("%s-rev%s", classification, revision)
+
+  if (classification == "bec") {
+    raw_dir <- classification
   }
+
+  if (!is.null(subdir)) {
+    raw_dir <- paste0(subdir, "/", raw_dir)
+  }
+  
   try(dir.create(raw_dir))
 
   raw_dir_zip <- sprintf("%s/%s", raw_dir, "zip")
@@ -256,7 +278,9 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   download_links <- tibble(
     year = years,
     url = paste0(
-      "https://comtrade.un.org/api/get/bulk/C/A/",
+      ifelse(classification == "eb",
+        "https://comtrade.un.org/api/get/bulk/S/A/",
+        "https://comtrade.un.org/api/get/bulk/C/A/"),
       !!sym("year"),
       "/ALL/",
       classification2,
@@ -383,7 +407,11 @@ data_downloading <- function(postgres = F, token = NULL, dataset = NULL, remove_
   if (classification == "sitc") {
     aggregations <- 0:5
   } else {
-    aggregations <- c(0, 2, 4, 6)
+    if (classification == "bec") {
+      aggregations <- 0:3
+    } else {
+      aggregations <- c(0, 2, 4, 6)
+    }
   }
 
   raw_zip <- list.files(

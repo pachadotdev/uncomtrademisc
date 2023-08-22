@@ -33,7 +33,8 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
   zip <- grep(paste0(yrs[t], "_freq-A"), raw_zip, value = T)
   # zip <- "~/github/un_escap/uncomtrade-full-download/hs-rev2007/zip/type-C_r-ALL_ps-2018_freq-A_px-H3_pub-20230323_fmt-csv_ex-20230324.zip"
 
-  al <- ifelse(classification == "hs", 6L, 5L)
+  al <- ifelse(classification == "hs", 6L,
+    ifelse(classification == "sitc", 5L, 3L))
   # al <- 6
 
   zout <- "trade"
@@ -44,33 +45,59 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
 
   csv <- list.files(zout, pattern = ".csv$", full.names = TRUE)
 
-  d2 <- read_csv(
-    csv,
-    col_types = cols(
-      Classification = col_skip(),
-      Year = col_integer(),
-      Period = col_skip(),
-      `Period Desc.` = col_skip(),
-      `Aggregate Level` = col_integer(),
-      `Is Leaf Code` = col_skip(),
-      `Trade Flow Code` = col_skip(),
-      `Trade Flow` = col_character(),
-      `Reporter Code` = col_integer(),
-      Reporter = col_character(),
-      `Reporter ISO` = col_character(),
-      `Partner Code` = col_integer(),
-      Partner = col_character(),
-      `Partner ISO` = col_character(),
-      `Commodity Code` = col_character(),
-      Commodity = col_character(),
-      `Qty Unit Code` = col_integer(),
-      `Qty Unit` = col_character(),
-      Qty = col_double(),
-      `Netweight (kg)` = col_double(),
-      `Trade Value (US$)` = col_double(),
-      Flag = col_skip()
+  if (classification != "eb") {
+    d2 <- read_csv(
+      csv,
+      col_types = cols(
+        Classification = col_skip(),
+        Year = col_integer(),
+        Period = col_skip(),
+        `Period Desc.` = col_skip(),
+        `Aggregate Level` = col_integer(),
+        `Is Leaf Code` = col_skip(),
+        `Trade Flow Code` = col_skip(),
+        `Trade Flow` = col_character(),
+        `Reporter Code` = col_integer(),
+        Reporter = col_character(),
+        `Reporter ISO` = col_character(),
+        `Partner Code` = col_integer(),
+        Partner = col_character(),
+        `Partner ISO` = col_character(),
+        `Commodity Code` = col_character(),
+        Commodity = col_character(),
+        `Qty Unit Code` = col_integer(),
+        `Qty Unit` = col_character(),
+        Qty = col_double(),
+        `Netweight (kg)` = col_double(),
+        `Trade Value (US$)` = col_double(),
+        Flag = col_skip()
+      )
     )
-  )
+  } else {
+    d2 <- read_csv(
+      csv,
+      col_types = cols(
+        Classification = col_skip(),
+        Year = col_integer(),
+        Period = col_skip(),
+        `Period Desc.` = col_skip(),
+        `Aggregate Level` = col_integer(),
+        `Is Leaf Code` = col_skip(),
+        `Trade Flow Code` = col_skip(),
+        `Trade Flow` = col_character(),
+        `Reporter Code` = col_integer(),
+        Reporter = col_character(),
+        `Reporter ISO` = col_character(),
+        `Partner Code` = col_integer(),
+        Partner = col_character(),
+        `Partner ISO` = col_character(),
+        `Commodity Code` = col_character(),
+        Commodity = col_character(),
+        `Trade Value (US$)` = col_double(),
+        Flag = col_skip()
+      )
+    )
+  }
 
   d2 <- d2 %>%
     clean_names()
@@ -134,7 +161,18 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
       d3 <- d3 %>%
         arrange(!!sym("reporter_iso"), !!sym("partner_iso"), !!sym("commodity_code"))
 
-      # print(d2)
+      if (classification == "eb") {
+        # https://unstats.un.org/unsd/classifications/Econ/Download/In%20Text/ebops2002_eng.pdf
+        codes_to_remove <-  c(
+          200, 205, 206, 210, 214, 219, 223, 227,
+          236, 237, 240, 245, 249, 253, 262, 264, 266,
+          268, 269, 273, 274, 281, 287, 289, 291,
+          950, 960, 961
+        )
+
+        d3 <- d3 %>%
+          filter(!(!!sym("commodity_code") %in% codes_to_remove))
+      }
 
       dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS %s (
         	commodity_code text,
@@ -149,19 +187,32 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
         	qty_unit_code int4,
         	qty_unit text)", paste0(gsub("-", "_", raw_dir), "_units")))
 
-      dbSendQuery(con, sprintf(
-        "CREATE TABLE IF NOT EXISTS %s (
-        	year int4,
-        	reporter_iso text,
-        	partner_iso text,
-        	reporter_code int4,
-        	partner_code int4,
-        	commodity_code text,
-        	qty_unit_code int4,
-        	qty float8,
-        	netweight_kg float8,
-        	trade_value_usd float8)", table_name
-      ))
+      if (classification != "eb") {
+        dbSendQuery(con, sprintf(
+          "CREATE TABLE IF NOT EXISTS %s (
+            year int4,
+            reporter_iso text,
+            partner_iso text,
+            reporter_code int4,
+            partner_code int4,
+            commodity_code text,
+            qty_unit_code int4,
+            qty float8,
+            netweight_kg float8,
+            trade_value_usd float8)", table_name
+        ))
+      } else {
+        dbSendQuery(con, sprintf(
+          "CREATE TABLE IF NOT EXISTS %s (
+            year int4,
+            reporter_iso text,
+            partner_iso text,
+            reporter_code int4,
+            partner_code int4,
+            commodity_code text,
+            trade_value_usd float8)", table_name
+        ))
+      }
 
       dbSendQuery(con, sprintf("DELETE FROM %s WHERE year=%s", table_name, yrs[t]))
 
@@ -209,19 +260,21 @@ convert_to_postgres <- function(t, yrs, raw_dir, raw_zip, years_to_update, class
       d3 <- d3 %>%
         select(-!!sym("reporter"), -!!sym("partner"))
 
-      units <- d3 %>%
-        select(!!sym("qty_unit_code"), !!sym("qty_unit")) %>%
-        distinct() %>%
-        bind_rows(dbReadTable(con, paste0(gsub("-", "_", raw_dir), "_units"))) %>%
-        distinct() %>%
-        arrange(!!sym("qty_unit_code"))
+      if (classification != "eb") {
+        units <- d3 %>%
+          select(!!sym("qty_unit_code"), !!sym("qty_unit")) %>%
+          distinct() %>%
+          bind_rows(dbReadTable(con, paste0(gsub("-", "_", raw_dir), "_units"))) %>%
+          distinct() %>%
+          arrange(!!sym("qty_unit_code"))
 
-      dbWriteTable(con, paste0(gsub("-", "_", raw_dir), "_units"), units, append = F, overwrite = T)
+        dbWriteTable(con, paste0(gsub("-", "_", raw_dir), "_units"), units, append = F, overwrite = T)
 
-      rm(units)
+        rm(units)
 
-      d3 <- d3 %>%
-        select(-!!sym("qty_unit"))
+        d3 <- d3 %>%
+          select(-!!sym("qty_unit"))
+      }
 
       # partition into smaller sub-sub-tables
 
